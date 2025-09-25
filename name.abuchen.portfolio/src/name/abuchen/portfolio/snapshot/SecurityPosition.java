@@ -96,6 +96,10 @@ public class SecurityPosition
 
     public Money calculateValue()
     {
+        if (shares <= 0) {
+            return Money.of(investment.getCurrencyCode(), 0);
+        }
+
         long marketValue = BigDecimal.valueOf(shares) //
                         .movePointLeft(Values.Share.precision())
                         .multiply(BigDecimal.valueOf(price.getValue()), Values.MC)
