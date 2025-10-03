@@ -41,9 +41,12 @@ import name.abuchen.portfolio.ui.update.UpdateHelper;
 import name.abuchen.portfolio.ui.util.ProgressMonitorFactory;
 import name.abuchen.portfolio.ui.util.RecentFilesCache;
 import name.abuchen.portfolio.ui.util.swt.ActiveShell;
+import name.abuchen.portfolio.ui.api.PortfolioApiServer;
 
 public class StartupAddon
 {
+    private PortfolioApiServer apiServer;
+
     private static final class UpdateExchangeRatesJob extends Job
     {
         private final IEventBroker broker;
@@ -229,5 +232,35 @@ public class StartupAddon
     public void setupActiveShellTracker()
     {
         ActiveShell.get();
+    }
+
+    @PostConstruct
+    public void startApiServer()
+    {
+        try
+        {
+            apiServer = new PortfolioApiServer();
+            apiServer.start();
+        }
+        catch (Exception e)
+        {
+            PortfolioPlugin.log(e);
+        }
+    }
+
+    @PreDestroy
+    public void stopApiServer()
+    {
+        if (apiServer != null)
+        {
+            try
+            {
+                apiServer.stop();
+            }
+            catch (Exception e)
+            {
+                PortfolioPlugin.log(e);
+            }
+        }
     }
 }
