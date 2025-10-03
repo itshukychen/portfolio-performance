@@ -131,26 +131,22 @@ public class PortfolioFileService {
         String fileId = generateFileId(relativePath);
         Client client = clientCache.get(fileId);
         
-        if (client == null) {
-            try {
-                // Load the actual portfolio file using ClientFactory
-                logger.info("Loading portfolio file: {} with ClientFactory", path);
-                
-                // Create a minimal progress monitor
-                MinimalProgressMonitor monitor = new MinimalProgressMonitor();
-                
-                // Load the client using ClientFactory with the provided password
-                client = ClientFactory.load(file, password, monitor);
-                
-                clientCache.put(fileId, client);
-                logger.info("Successfully loaded portfolio file: {}", relativePath);
-                
-            } catch (Exception e) {
-                logger.error("Failed to load portfolio file: {}", relativePath, e);
-                throw new IOException("Failed to process portfolio file: " + e.getMessage(), e);
-            }
-        } else {
-            logger.info("Using cached client for file: {}", relativePath);
+        try {
+            // Load the actual portfolio file using ClientFactory
+            logger.info("Loading portfolio file: {} with ClientFactory", path);
+            
+            // Create a minimal progress monitor
+            MinimalProgressMonitor monitor = new MinimalProgressMonitor();
+            
+            // Load the client using ClientFactory with the provided password
+            client = ClientFactory.load(file, password, monitor);
+            
+            clientCache.put(fileId, client);
+            logger.info("Successfully loaded portfolio file: {}", relativePath);
+            
+        } catch (Exception e) {
+            logger.error("Failed to load portfolio file: {}", relativePath, e);
+            throw new IOException("Failed to process portfolio file: " + e.getMessage(), e);
         }
         
         // Create file info

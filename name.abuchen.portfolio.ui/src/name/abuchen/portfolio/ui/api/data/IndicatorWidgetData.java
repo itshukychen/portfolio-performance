@@ -84,13 +84,13 @@ public class IndicatorWidgetData<N> {
             return this;
         }
 
-                public IndicatorWidgetData<N> build() {
-                    Objects.requireNonNull(formatter);
-                    Objects.requireNonNull(provider);
+        public IndicatorWidgetData<N> build() {
+            Objects.requireNonNull(formatter);
+            Objects.requireNonNull(provider);
 
-                    return new IndicatorWidgetData<>(widgetId, dashboardData, formatter, provider, 
-                            tooltip, supportsBenchmarks, predicate, isValueColored, config);
-                }
+            return new IndicatorWidgetData<>(widgetId, dashboardData, formatter, provider, 
+                    tooltip, supportsBenchmarks, predicate, isValueColored, config);
+        }
     }
 
     private final String widgetId;
@@ -142,6 +142,8 @@ public class IndicatorWidgetData<N> {
             
             // Get reporting period from configuration (will fall back to defaults)
             Interval reportingPeriod = getReportingPeriodFromConfig();
+            logger.info("Reporting period: {}", reportingPeriod);
+            logger.info("Data series: {}", dataSeries);
             
             // Calculate the value using the provider function
             N value = provider.apply(dataSeries, reportingPeriod);

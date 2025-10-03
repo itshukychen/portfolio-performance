@@ -15,7 +15,10 @@ import java.time.format.FormatStyle;
 import java.util.OptionalDouble;
 import java.util.stream.LongStream;
 
+import name.abuchen.portfolio.ui.api.data.ChartWidgetData;
 import name.abuchen.portfolio.ui.api.data.IndicatorWidgetData;
+import name.abuchen.portfolio.ui.api.data.PerformanceCalculationWidgetData;
+import name.abuchen.portfolio.ui.api.data.TaxonomyChartWidgetData;
 import name.abuchen.portfolio.ui.api.data.Widget;
 import name.abuchen.portfolio.math.Risk.Drawdown;
 import name.abuchen.portfolio.money.Money;
@@ -23,6 +26,7 @@ import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.snapshot.PerformanceIndex;
 import name.abuchen.portfolio.ui.views.dashboard.DashboardData;
 import name.abuchen.portfolio.ui.views.dataseries.DataSeries;
+import name.abuchen.portfolio.ui.views.dataseries.DataSeries.UseCase;
 import name.abuchen.portfolio.ui.Messages;
 import name.abuchen.portfolio.model.ClientProperties;
 import name.abuchen.portfolio.model.Security;
@@ -306,17 +310,21 @@ public enum WidgetDataFactory {
                                     .withColoredValues(false) //
                                     .build()),
     
-    CALCULATION(Messages.LabelPerformanceCalculation, Messages.ClientEditorLabelPerformance, (widget, data) -> createEmptyWidgetData(widget.getId(), "calculation")),
+    CALCULATION(Messages.LabelPerformanceCalculation, Messages.ClientEditorLabelPerformance, 
+                    (widget, data) -> new PerformanceCalculationWidgetData(widget, data)),
     
-    CHART(Messages.LabelPerformanceChart, Messages.ClientEditorLabelPerformance, (widget, data) -> createEmptyWidgetData(widget.getId(), "chart")),
+    CHART(Messages.LabelPerformanceChart, Messages.ClientEditorLabelPerformance, 
+                    (widget, data) -> new ChartWidgetData(widget, data, UseCase.PERFORMANCE)),
     
-    ASSET_CHART(Messages.LabelAssetChart, Messages.LabelStatementOfAssets, (widget, data) -> createEmptyWidgetData(widget.getId(), "asset_chart")),
+    ASSET_CHART(Messages.LabelAssetChart, Messages.LabelStatementOfAssets, 
+                    (widget, data) -> new ChartWidgetData(widget, data, UseCase.STATEMENT_OF_ASSETS)),
     
     HOLDINGS_CHART(Messages.LabelStatementOfAssetsHoldings, Messages.LabelStatementOfAssets, (widget, data) -> createEmptyWidgetData(widget.getId(), "holdings_chart")),
     
     CLIENT_DATA_SERIES_CHART(Messages.LabelStatementOfAssetsDerivedDataSeries, Messages.LabelStatementOfAssets, (widget, data) -> createEmptyWidgetData(widget.getId(), "client_data_series_chart")),
     
-    TAXONOMY_CHART(Messages.LabelTaxonomies, Messages.LabelStatementOfAssets, (widget, data) -> createEmptyWidgetData(widget.getId(), "taxonomy_chart")),
+    TAXONOMY_CHART(Messages.LabelTaxonomies, Messages.LabelStatementOfAssets, 
+                    (widget, data) -> new TaxonomyChartWidgetData(widget, data)),
     
     HEATMAP(Messages.LabelHeatmap, Messages.ClientEditorLabelPerformance, (widget, data) -> createEmptyWidgetData(widget.getId(), "heatmap")),
     
@@ -548,6 +556,21 @@ public enum WidgetDataFactory {
         // If the result is an IndicatorWidgetData, call generateData() on it
         if (result instanceof IndicatorWidgetData) {
             return ((IndicatorWidgetData<?>) result).generateData();
+        }
+        
+        // If the result is a PerformanceCalculationWidgetData, call generateData() on it
+        if (result instanceof PerformanceCalculationWidgetData) {
+            return ((PerformanceCalculationWidgetData) result).generateData();
+        }
+        
+        // If the result is a ChartWidgetData, call generateData() on it
+        if (result instanceof ChartWidgetData) {
+            return ((ChartWidgetData) result).generateData();
+        }
+        
+        // If the result is a TaxonomyChartWidgetData, call generateData() on it
+        if (result instanceof TaxonomyChartWidgetData) {
+            return ((TaxonomyChartWidgetData) result).generateData();
         }
         
         // Otherwise, assume it's already a Map
