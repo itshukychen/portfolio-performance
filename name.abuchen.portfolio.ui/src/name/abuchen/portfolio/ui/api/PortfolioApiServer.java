@@ -33,12 +33,26 @@ public class PortfolioApiServer
     public void start(int port) throws Exception
     {
         server = HttpServer.create(new InetSocketAddress(port), 0);
+        
+        // Hello world endpoint
         server.createContext("/api/hello", new HelloWorldHandler());
+        
+        // Mock Portfolio Controller endpoints
+        MockPortfolioController mockController = new MockPortfolioController();
+        server.createContext("/api/v1/portfolios", new PortfolioRouterHandler(mockController));
+        
+        // Catch-all handler for unmatched routes
         server.createContext("/", new NotFoundHandler());
         server.setExecutor(null); // creates a default executor
         server.start();
         
         System.out.println("Portfolio API Server started on port " + port);
+        System.out.println("Available endpoints:");
+        System.out.println("  GET /api/hello - Hello world endpoint");
+        System.out.println("  GET /api/v1/portfolios - List all portfolios");
+        System.out.println("  GET /api/v1/portfolios/health - Health check");
+        System.out.println("  GET /api/v1/portfolios/{portfolioId} - Get portfolio by ID");
+        System.out.println("  GET /api/v1/portfolios/{portfolioId}/widgetData - Get widget data");
     }
 
     public void stop()
@@ -96,6 +110,49 @@ public class PortfolioApiServer
             try (OutputStream os = exchange.getResponseBody())
             {
                 os.write(responseBytes);
+            }
+        }
+    }
+
+    private class PortfolioRouterHandler implements HttpHandler
+    {
+        private final MockPortfolioController mockController;
+        
+        public PortfolioRouterHandler(MockPortfolioController mockController)
+        {
+            this.mockController = mockController;
+        }
+        
+        @Override
+        public void handle(HttpExchange exchange) throws IOException
+        {
+            String path = exchange.getRequestURI().getPath();
+            
+            // Route to appropriate handler based on path
+            if ("/api/v1/portfolios".equals(path) || "/api/v1/portfolios/".equals(path))
+            {
+                // List portfolios endpoint
+                mockController.new ListPortfoliosHandler().handle(exchange);
+            }
+            else if ("/api/v1/portfolios/health".equals(path))
+            {
+                // Health check endpoint
+                mockController.new HealthHandler().handle(exchange);
+            }
+            else if (path.startsWith("/api/v1/portfolios/") && path.endsWith("/widgetData"))
+            {
+                // Widget data endpoint
+                mockController.new GetWidgetDataHandler().handle(exchange);
+            }
+            else if (path.startsWith("/api/v1/portfolios/") && path.split("/").length == 5)
+            {
+                // Get portfolio by ID endpoint
+                mockController.new GetPortfolioHandler().handle(exchange);
+            }
+            else
+            {
+                // Not found
+                new NotFoundHandler().handle(exchange);
             }
         }
     }
