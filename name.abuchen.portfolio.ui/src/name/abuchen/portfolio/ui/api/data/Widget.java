@@ -37,4 +37,3 @@ public class Widget {
         return "Widget{id='" + id + "', type='" + type + "', configuration=" + configuration + "}";
     }
 }
-

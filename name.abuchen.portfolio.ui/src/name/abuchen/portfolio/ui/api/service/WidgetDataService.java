@@ -10,9 +10,17 @@ import name.abuchen.portfolio.ui.api.data.Widget;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Dashboard;
 import name.abuchen.portfolio.ui.views.dashboard.DashboardData;
+import name.abuchen.portfolio.ui.views.dataseries.DataSeriesCache;
+import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
+import org.eclipse.jface.preference.IPreferenceStore;
+import org.eclipse.jface.preference.PreferenceStore;
+import org.eclipse.e4.ui.services.IStylingEngine;
 import org.eclipse.e4.core.contexts.ContextInjectionFactory;
 import org.eclipse.e4.core.contexts.IEclipseContext;
 import org.eclipse.e4.core.contexts.EclipseContextFactory;
+import name.abuchen.portfolio.ui.util.UI;
+import name.abuchen.portfolio.ui.api.factory.WidgetDataFactory;
+import name.abuchen.portfolio.ui.api.data.Widget;
 
 /**
  * Service for managing widget data operations.
@@ -39,6 +47,15 @@ public class WidgetDataService {
      * @return Widget data as a Map
      */
     public Map<String, Object> getWidgetData(Dashboard.Widget dashboardWidget, Client client) {
+        // Marshal all SWT work to the UI thread since this is called from REST handlers
+        return UI.sync(() -> getWidgetDataInternal(dashboardWidget, client));
+    }
+    
+    /**
+     * Internal implementation of getWidgetData that runs on the UI thread.
+     * This method and everything it calls may touch SWT resources (Colors, Fonts, etc.)
+     */
+    private Map<String, Object> getWidgetDataInternal(Dashboard.Widget dashboardWidget, Client client) {
         logger.info("Getting widget data for Dashboard.Widget: {} with client", dashboardWidget);
         
         if (dashboardWidget == null) {
@@ -76,17 +93,47 @@ public class WidgetDataService {
                 return emptyData;
             }
             
-            // Return basic widget information
-            // Full widget data generation would require WidgetDataFactory which has many dependencies
+            // Create Widget wrapper from Dashboard.Widget
+            Widget widget = new Widget(
+                dashboardWidget.getLabel(),
+                dashboardWidget.getType(),
+                dashboardWidget.getConfiguration()
+            );
+            
+            // Get the widget type from the Dashboard.Widget
+            String widgetType = dashboardWidget.getType();
+            
+            // Look up the WidgetDataFactory for this widget type
+            WidgetDataFactory factory = WidgetDataFactory.valueOf(widgetType);
+            
+            if (factory == null) {
+                logger.warn("No WidgetDataFactory found for type: {}", widgetType);
+                Map<String, Object> errorData = new HashMap<>();
+                errorData.put("widgetId", dashboardWidget.getLabel());
+                errorData.put("type", widgetType);
+                errorData.put("message", "Unknown widget type: " + widgetType);
+                errorData.put("timestamp", java.time.LocalDateTime.now().toString());
+                return errorData;
+            }
+            
+            // Generate widget data using the factory
+            logger.info("Generating widget data for type: {}", widgetType);
+            Map<String, Object> widgetData = factory.generateData(widget, dashboardData);
+            
+            logger.info("Successfully generated widget data for type: {}", widgetType);
+            return widgetData;
+            
+        } catch (IllegalArgumentException e) {
+            logger.error("Invalid widget type", e);
+            
             Map<String, Object> widgetData = new HashMap<>();
             widgetData.put("widgetId", dashboardWidget.getLabel());
             widgetData.put("type", dashboardWidget.getType());
             widgetData.put("config", dashboardWidget.getConfiguration());
-            widgetData.put("message", "Widget data available - full implementation pending");
+            widgetData.put("message", "Invalid widget type: " + dashboardWidget.getType());
             widgetData.put("timestamp", java.time.LocalDateTime.now().toString());
             
             return widgetData;
-            
         } catch (Exception e) {
             logger.error("Failed to get widget data", e);
             
@@ -103,7 +150,8 @@ public class WidgetDataService {
     }
     
     /**
-     * Create a DashboardData instance with the provided Client using ContextInjectionFactory.
+     * Create a DashboardData instance with the provided Client using Eclipse dependency injection.
+     * Populates an Eclipse context with all required dependencies and uses ContextInjectionFactory.
      * 
      * @param client The portfolio Client instance
      * @return DashboardData instance or null if creation fails
@@ -120,15 +168,34 @@ public class WidgetDataService {
                 client.getAccounts().size(), 
                 client.getPortfolios().size());
             
-            // Create Eclipse context and populate it with required dependencies
+            // Create Eclipse context and populate it with all required dependencies
+            // This follows the pattern used in PortfolioPart.createView() and AbstractFinanceView.make()
             IEclipseContext context = EclipseContextFactory.create();
             
-            // Add required dependencies to context
-            context.set(Client.class.getName(), client);
+            // 1. Add Client to context
+            context.set(Client.class, client);
             
-            logger.info("Creating DashboardData using ContextInjectionFactory");
+            // 2. Create and add ExchangeRateProviderFactory (it only needs Client)
+            ExchangeRateProviderFactory exchangeRateFactory = new ExchangeRateProviderFactory(client);
+            context.set(ExchangeRateProviderFactory.class, exchangeRateFactory);
             
-            // Use ContextInjectionFactory to create DashboardData, just like in DashboardView
+            // 3. Create and add DataSeriesCache using ContextInjectionFactory
+            // It will automatically inject Client and ExchangeRateProviderFactory from context
+            DataSeriesCache dataSeriesCache = ContextInjectionFactory.make(DataSeriesCache.class, context);
+            context.set(DataSeriesCache.class, dataSeriesCache);
+            
+            // 4. Add IPreferenceStore - use a simple in-memory preference store
+            // In a server context, we don't need persistent preferences
+            IPreferenceStore preferenceStore = new PreferenceStore();
+            context.set(IPreferenceStore.class, preferenceStore);
+            
+            // 5. IStylingEngine - set to null since it's only used for UI styling
+            // In a server/API context, we don't have UI components to style
+            context.set(IStylingEngine.class, null);
+            
+            logger.info("Creating DashboardData using ContextInjectionFactory with populated context");
+            
+            // Use ContextInjectionFactory to create DashboardData with dependency injection
             return ContextInjectionFactory.make(DashboardData.class, context);
             
         } catch (Exception e) {

@@ -40,7 +40,7 @@ FULL=false
 TEST=false
 OPEN=false
 START_API=false
-START_SERVER=false
+START_SERVER=true
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
