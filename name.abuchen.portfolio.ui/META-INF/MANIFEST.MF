@@ -23,6 +23,7 @@ Import-Package: com.google.common.base,
  javax.annotation.security,
  javax.inject;version="[1.0,2)",
  javax.xml.bind.annotation,
+ org.slf4j;version="[1.7,3)",
  org.eclipse.jetty.server;version="[9.4,10)",
  org.eclipse.jetty.server.handler;version="[9.4,10)",
  org.eclipse.jetty.servlet;version="[9.4,10)",
@@ -149,7 +150,8 @@ Require-Bundle: name.abuchen.portfolio;bundle-version="0.78.2",
  org.eclipse.ui.themes,
  org.eclipse.jface,
  org.apache.httpcomponents.core5.httpcore5,
- io.github.java-diff-utils
+ io.github.java-diff-utils,
+ slf4j.simple;bundle-version="2.0.16"
 Automatic-Module-Name: name.abuchen.portfolio.ui
 Service-Component: OSGI-INF/name.abuchen.portfolio.ui.util.theme.ColorAndFontProviderImpl.xml,
  OSGI-INF/name.abuchen.portfolio.ui.theme.CustomThemeEngineManager.xml

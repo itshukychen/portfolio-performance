@@ -21,6 +21,21 @@ portfolio-product/target/products/name.abuchen.portfolio.server.product/
 
 ## Running
 
+### Quick Start
+
+The easiest way to run the server:
+
+```bash
+# Build and start in one command
+./compile.sh --server --start-server
+
+# Or just run if already built
+./compile.sh --run-server
+
+# Or use the convenience script
+./run-server.sh [port]
+```
+
 ### macOS
 
 The server requires `-XstartOnFirstThread` VM argument (already configured in the product):
@@ -65,6 +80,25 @@ PortfolioPerformanceServer.exe -nosplash -consoleLog
 java -jar plugins/org.eclipse.equinox.launcher_*.jar \
      -application name.abuchen.portfolio.server.application \
      -nosplash -consoleLog
+```
+
+### Using compile.sh Script
+
+The project includes a build script with server support:
+
+```bash
+# Build the server
+./compile.sh --server
+
+# Build and start the server
+./compile.sh --server --start-server
+
+# Run the server (if already built)
+./compile.sh --run-server
+
+# Or use the dedicated run script
+./run-server.sh          # Run on port 8080
+./run-server.sh 9090     # Run on port 9090
 ```
 
 ## Configuration

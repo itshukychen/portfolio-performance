@@ -11,7 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import name.abuchen.portfolio.ui.api.controller.HelloWorldController;
-import name.abuchen.portfolio.ui.api.controller.MockPortfolioController;
+import name.abuchen.portfolio.ui.api.controller.PortfolioController;
 
 /**
  * Jersey configuration for JSON support in the Portfolio Performance API server.
@@ -47,7 +47,7 @@ public class JerseyConfig extends ResourceConfig {
         
         // Manually register controllers to avoid package scanning issues
         register(HelloWorldController.class);
-        register(MockPortfolioController.class);
+        register(PortfolioController.class);
         
         // Disable Bean Validation to avoid javax.validation dependency in OSGi
         property(ServerProperties.BV_FEATURE_DISABLE, true);

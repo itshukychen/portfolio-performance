@@ -18,6 +18,7 @@ show_usage() {
     echo "  --test         Run tests"
     echo "  --open         Open the built application (app only)"
     echo "  --start-api    Start the API server after building"
+    echo "  --start-server Start the server executable after building"
     echo "  --help         Show this help message"
     echo ""
     echo "Examples:"
@@ -25,6 +26,7 @@ show_usage() {
     echo "  $0 --app              # Build only the desktop application"
     echo "  $0 --server           # Build only the server executable"
     echo "  $0 --api --start-api  # Build and start the API server"
+    echo "  $0 --server --start-server # Build and start the server executable"
     echo "  $0 --all              # Build desktop app, server executable, and API"
     echo "  $0 --clean --both     # Clean and build both projects"
 }
@@ -38,6 +40,7 @@ FULL=false
 TEST=false
 OPEN=false
 START_API=false
+START_SERVER=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -90,6 +93,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --start-api)
             START_API=true
+            shift
+            ;;
+        --start-server)
+            START_SERVER=true
             shift
             ;;
         --help)
@@ -228,6 +235,21 @@ if [[ $OVERALL_EXIT_CODE -eq 0 ]]; then
     if [[ "$START_API" == true ]]; then
         echo "🚀 Starting Portfolio Performance API server..."
         $SCRIPT_DIR/name.abuchen.portfolio.api/start-api-server.sh
+    fi
+    
+    if [[ "$START_SERVER" == true ]]; then
+        echo "🚀 Starting Portfolio Performance Server..."
+        echo "📋 Server will run on http://localhost:8080 (or specify port with -Dportfolio.server.port=XXXX)"
+        echo "📋 Press Ctrl+C to stop the server"
+        echo ""
+        SERVER_APP="$SCRIPT_DIR/portfolio-product/target/products/name.abuchen.portfolio.server.product/macosx/cocoa/aarch64/portfolio-server.app"
+        if [[ -d "$SERVER_APP" ]]; then
+            PORTFOLIO_DIR=$(realpath $SCRIPT_DIR/portfolios) "$SERVER_APP/Contents/MacOS/PortfolioPerformanceServer" -nosplash -consoleLog
+        else
+            echo "❌ Server executable not found at: $SERVER_APP"
+            echo "   Please build the server first with: $0 --server"
+            exit 1
+        fi
     fi
 else
     echo ""

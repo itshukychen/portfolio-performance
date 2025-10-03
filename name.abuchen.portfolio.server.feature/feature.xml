@@ -42,6 +42,21 @@ For purposes of the EPL, &quot;Program&quot; will mean the Content.
          version="0.0.0"
          unpack="false"/>
 
+   <!-- SLF4J logging -->
+   <plugin
+         id="slf4j.api"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         unpack="false"/>
+
+   <plugin
+         id="slf4j.simple"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         unpack="false"/>
+
    <!-- PDF support bundles -->
    <plugin
          id="name.abuchen.portfolio.pdfbox1"
