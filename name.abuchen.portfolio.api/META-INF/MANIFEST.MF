@@ -1,0 +1,26 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Portfolio Performance API Server
+Bundle-SymbolicName: name.abuchen.portfolio.api
+Bundle-Version: 0.78.2.qualifier
+Bundle-ActivationPolicy: lazy
+Import-Package: name.abuchen.portfolio,
+ name.abuchen.portfolio.model,
+ jakarta.servlet,
+ jakarta.servlet.http,
+ jakarta.ws.rs,
+ jakarta.ws.rs.core,
+ com.fasterxml.jackson.annotation,
+ com.fasterxml.jackson.core,
+ com.fasterxml.jackson.databind,
+ com.fasterxml.jackson.databind.annotation,
+ org.slf4j,
+ org.eclipse.core.runtime,
+ org.eclipse.jface.preference,
+ org.eclipse.jface.util,
+ org.eclipse.e4.ui.services
+Export-Package: name.abuchen.portfolio.api,
+ name.abuchen.portfolio.api.controller,
+ name.abuchen.portfolio.api.dto,
+ name.abuchen.portfolio.api.service
+Require-Bundle: name.abuchen.portfolio;bundle-version="0.78.2"
