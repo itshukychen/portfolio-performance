@@ -70,6 +70,11 @@
 								<macosx>PortfolioPerformance.app</macosx>
 							</rootFolders>
 						</product>
+						<product>
+							<id>name.abuchen.portfolio.server.product</id>
+							<rootFolder>portfolio-server</rootFolder>
+							<archiveFileName>PortfolioPerformanceServer-${project.version}</archiveFileName>
+						</product>
 					</products>
 				</configuration>
 			</plugin>
@@ -157,6 +162,12 @@
 									<rootFolders>
 										<macosx>PortfolioPerformance.app</macosx>
 									</rootFolders>
+								</product>
+								<product>
+									<id>name.abuchen.portfolio.server.product</id>
+									<attachId>name.abuchen.portfolio.server.product</attachId>
+									<rootFolder>portfolio-server</rootFolder>
+									<archiveFileName>PortfolioPerformanceServer-${project.version}</archiveFileName>
 								</product>
 							</products>
 						</configuration>
