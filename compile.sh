@@ -40,7 +40,7 @@ FULL=false
 TEST=false
 OPEN=false
 START_API=false
-START_SERVER=true
+START_SERVER=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -229,7 +229,7 @@ if [[ $OVERALL_EXIT_CODE -eq 0 ]]; then
     
     if [[ "$OPEN" == true ]]; then
         echo "🚀 Opening Portfolio Performance application..."
-        open $SCRIPT_DIR/portfolio-product/target/products/name.abuchen.portfolio.product/macosx/cocoa/aarch64/PortfolioPerformance.app
+        PORTFOLIO_DIR=$(realpath $SCRIPT_DIR/portfolios) open $SCRIPT_DIR/portfolio-product/target/products/name.abuchen.portfolio.product/macosx/cocoa/aarch64/PortfolioPerformance.app
     fi
     
     if [[ "$START_API" == true ]]; then

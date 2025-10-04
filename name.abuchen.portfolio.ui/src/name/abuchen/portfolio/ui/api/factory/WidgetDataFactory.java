@@ -18,6 +18,7 @@ import java.util.stream.LongStream;
 import name.abuchen.portfolio.ui.api.data.ChartWidgetData;
 import name.abuchen.portfolio.ui.api.data.IndicatorWidgetData;
 import name.abuchen.portfolio.ui.api.data.PerformanceCalculationWidgetData;
+import name.abuchen.portfolio.ui.api.data.RebalancingChartWidgetData;
 import name.abuchen.portfolio.ui.api.data.TaxonomyChartWidgetData;
 import name.abuchen.portfolio.ui.api.data.Widget;
 import name.abuchen.portfolio.math.Risk.Drawdown;
@@ -469,7 +470,8 @@ public enum WidgetDataFactory {
     REBALANCING_TARGET_CHART(MessageFormat.format(Messages.LabelColonSeparated, Messages.LabelTaxonomies,
                                     Messages.ColumnTargetValue), Messages.LabelStatementOfAssets, (widget, data) -> createEmptyWidgetData(widget.getId(), "rebalancing_target_chart")),
     
-    REBALANCING_CHART(Messages.RebalancingChartActualVsTarget, Messages.LabelStatementOfAssets, (widget, data) -> createEmptyWidgetData(widget.getId(), "rebalancing_chart")),
+    REBALANCING_CHART(Messages.RebalancingChartActualVsTarget, Messages.LabelStatementOfAssets, 
+                    (widget, data) -> new RebalancingChartWidgetData(widget, data)),
     
     VERTICAL_SPACER(Messages.LabelVerticalSpacer, Messages.LabelCommon, (widget, data) -> createEmptyWidgetData(widget.getId(), "vertical_spacer")),
     
@@ -571,6 +573,11 @@ public enum WidgetDataFactory {
         // If the result is a TaxonomyChartWidgetData, call generateData() on it
         if (result instanceof TaxonomyChartWidgetData) {
             return ((TaxonomyChartWidgetData) result).generateData();
+        }
+        
+        // If the result is a RebalancingChartWidgetData, call generateData() on it
+        if (result instanceof RebalancingChartWidgetData) {
+            return ((RebalancingChartWidgetData) result).generateData();
         }
         
         // Otherwise, assume it's already a Map
