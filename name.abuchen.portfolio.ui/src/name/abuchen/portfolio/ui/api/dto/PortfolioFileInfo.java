@@ -24,6 +24,7 @@ public class PortfolioFileInfo {
     private boolean clientLoaded;
     private String clientInfo;
     private List<DashboardDto> dashboards;
+    private List<ReportingPeriodDto> reportingPeriods;
     
     // Constructors
     public PortfolioFileInfo() {}
@@ -139,5 +140,13 @@ public class PortfolioFileInfo {
     
     public void setDashboards(List<DashboardDto> dashboards) {
         this.dashboards = dashboards;
+    }
+    
+    public List<ReportingPeriodDto> getReportingPeriods() {
+        return reportingPeriods;
+    }
+    
+    public void setReportingPeriods(List<ReportingPeriodDto> reportingPeriods) {
+        this.reportingPeriods = reportingPeriods;
     }
 }

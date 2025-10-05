@@ -91,7 +91,7 @@ public class ClientInput
     @Preference
     private IEclipsePreferences preferences;
 
-    /* protected */ ClientInput(String label, File clientFile)
+    public ClientInput(String label, File clientFile)
     {
         this.label = label;
         this.clientFile = clientFile;
@@ -633,7 +633,7 @@ public class ClientInput
         this.listeners.forEach(l -> l.onError(message));
     }
 
-    /* package */ void setClient(Client client)
+    public void setClient(Client client)
     {
         if (this.client != null)
             throw new IllegalArgumentException("client is already set"); //$NON-NLS-1$

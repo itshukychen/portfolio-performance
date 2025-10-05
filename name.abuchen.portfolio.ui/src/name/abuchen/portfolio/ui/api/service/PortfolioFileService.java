@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -23,10 +24,13 @@ import org.slf4j.LoggerFactory;
 
 import name.abuchen.portfolio.ui.api.dto.DashboardDto;
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
+import name.abuchen.portfolio.ui.api.dto.ReportingPeriodDto;
 import name.abuchen.portfolio.ui.api.util.DashboardConverter;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.ClientFactory;
 import name.abuchen.portfolio.model.Dashboard;
+import name.abuchen.portfolio.snapshot.ReportingPeriod;
+import name.abuchen.portfolio.model.ConfigurationSet.WellKnownConfigurationSets;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 
@@ -50,31 +54,13 @@ public class PortfolioFileService {
      * Constructor that initializes the portfolio directory from environment variable or system property.
      */
     public PortfolioFileService() {
-        String portfolioDir = System.getenv("PORTFOLIO_DIR");
-        if (portfolioDir == null) {
-            portfolioDir = System.getProperty("portfolio.dir");
-        }
-        if (portfolioDir == null) {
-            // Default to current working directory
-            portfolioDir = System.getProperty("user.dir");
-        }
-        
-        this.portfolioDirectory = Paths.get(portfolioDir).toAbsolutePath();
-        logger.info("Portfolio directory set to: {}", this.portfolioDirectory);
-        
-        // Ensure directory exists
-        if (!Files.exists(this.portfolioDirectory)) {
-            try {
-                Files.createDirectories(this.portfolioDirectory);
-                logger.info("Created portfolio directory: {}", this.portfolioDirectory);
-            } catch (IOException e) {
-                logger.error("Failed to create portfolio directory: {}", this.portfolioDirectory, e);
-            }
-        }
+        this(getDefaultPortfolioDirectory());
     }
     
     /**
      * Constructor with explicit portfolio directory.
+     * 
+     * @param portfolioDir Portfolio directory path
      */
     public PortfolioFileService(String portfolioDir) {
         this.portfolioDirectory = Paths.get(portfolioDir).toAbsolutePath();
@@ -92,6 +78,23 @@ public class PortfolioFileService {
     }
     
     /**
+     * Get the default portfolio directory from environment variable or system property.
+     * 
+     * @return Default portfolio directory path
+     */
+    private static String getDefaultPortfolioDirectory() {
+        String portfolioDir = System.getenv("PORTFOLIO_DIR");
+        if (portfolioDir == null) {
+            portfolioDir = System.getProperty("portfolio.dir");
+        }
+        if (portfolioDir == null) {
+            // Default to current working directory
+            portfolioDir = System.getProperty("user.dir");
+        }
+        return portfolioDir;
+    }
+    
+    /**
      * Open and load a portfolio file from the given relative path.
      * The path is resolved against the portfolio directory.
      * 
@@ -104,14 +107,32 @@ public class PortfolioFileService {
     public PortfolioFileInfo openFile(String relativePath, char[] password) throws IOException {
         logger.info("Opening portfolio file: {} (relative to: {})", relativePath, portfolioDirectory);
         
+        File file = validateAndResolveFilePath(relativePath);
+        validateFileAccess(file, relativePath, password);
+        
+        String fileId = generateFileId(relativePath);
+        Client client = loadClient(file, fileId, relativePath, password);
+        
+        PortfolioFileInfo fileInfo = createBasicFileInfo(file, relativePath, fileId);
+        populateClientData(fileInfo, client, file);
+        
+        return fileInfo;
+    }
+    
+    /**
+     * Validates and resolves the file path.
+     * 
+     * @param relativePath The relative path to validate
+     * @return The resolved File object
+     * @throws IOException if validation fails
+     */
+    private File validateAndResolveFilePath(String relativePath) throws IOException {
         if (relativePath == null || relativePath.trim().isEmpty()) {
             throw new IllegalArgumentException("File path cannot be null or empty");
         }
         
-        // Resolve the relative path against the portfolio directory
         Path path = portfolioDirectory.resolve(relativePath).normalize();
         
-        // Security check: ensure the resolved path is within the portfolio directory
         if (!path.startsWith(portfolioDirectory)) {
             throw new SecurityException("Access denied: path outside portfolio directory");
         }
@@ -120,94 +141,252 @@ public class PortfolioFileService {
             throw new FileNotFoundException("Portfolio file not found: " + relativePath + " (resolved to: " + path + ")");
         }
         
-        File file = path.toFile();
-        
-        // Check if file is encrypted and password is required
+        return path.toFile();
+    }
+    
+    /**
+     * Validates file access requirements (encryption, password).
+     * 
+     * @param file The file to validate
+     * @param relativePath The relative path (for error messages)
+     * @param password The provided password
+     * @throws IOException if access validation fails
+     */
+    private void validateFileAccess(File file, String relativePath, char[] password) throws IOException {
         if (ClientFactory.isEncrypted(file) && password == null) {
             throw new IOException("Password required for encrypted file: " + relativePath);
         }
-        
-        // Check cache first using file ID as key
-        String fileId = generateFileId(relativePath);
+    }
+    
+    /**
+     * Loads the client from cache or from file.
+     * 
+     * @param file The file to load
+     * @param fileId The file ID for caching
+     * @param relativePath The relative path (for logging)
+     * @param password The password for encrypted files
+     * @return The loaded Client
+     * @throws IOException if loading fails
+     */
+    private Client loadClient(File file, String fileId, String relativePath, char[] password) throws IOException {
         Client client = clientCache.get(fileId);
         
+        if (client != null) {
+            logger.info("Using cached client for: {}", relativePath);
+            return client;
+        }
+        
         try {
-            // Load the actual portfolio file using ClientFactory
-            logger.info("Loading portfolio file: {} with ClientFactory", path);
+            logger.info("Loading portfolio file: {} with ClientFactory", file.getAbsolutePath());
             
-            // Create a minimal progress monitor
             MinimalProgressMonitor monitor = new MinimalProgressMonitor();
-            
-            // Load the client using ClientFactory with the provided password
             client = ClientFactory.load(file, password, monitor);
             
             clientCache.put(fileId, client);
             logger.info("Successfully loaded portfolio file: {}", relativePath);
             
+            return client;
         } catch (Exception e) {
             logger.error("Failed to load portfolio file: {}", relativePath, e);
             throw new IOException("Failed to process portfolio file: " + e.getMessage(), e);
         }
-        
-        // Create file info
+    }
+    
+    /**
+     * Creates basic file information.
+     * 
+     * @param file The file
+     * @param relativePath The relative path
+     * @param fileId The file ID
+     * @return PortfolioFileInfo with basic information
+     */
+    private PortfolioFileInfo createBasicFileInfo(File file, String relativePath, String fileId) {
         PortfolioFileInfo fileInfo = new PortfolioFileInfo();
-        fileInfo.setId(generateFileId(relativePath));
+        fileInfo.setId(fileId);
         fileInfo.setName(extractName(relativePath));
         fileInfo.setLastModified(LocalDateTime.ofInstant(
             java.time.Instant.ofEpochMilli(file.lastModified()),
             ZoneId.systemDefault()
         ));
         fileInfo.setEncrypted(ClientFactory.isEncrypted(file));
-        
-        // Add client info if available
-        if (client != null) {
-            fileInfo.setBaseCurrency(client.getBaseCurrency());
-            fileInfo.setVersion(client.getFileVersionAfterRead());
-            
-            // Count entities
-            fileInfo.setSecuritiesCount(client.getSecurities().size());
-            fileInfo.setAccountsCount(client.getAccounts().size());
-            fileInfo.setPortfoliosCount(client.getPortfolios().size());
-            fileInfo.setTransactionsCount(client.getAllTransactions().size());
-            
-            fileInfo.setClientLoaded(true);
-            fileInfo.setClientInfo("Client loaded successfully");
-            
-            // Add dashboard information
-            List<Dashboard> dashboards = client.getDashboards().collect(Collectors.toList());
-            logger.info("Found {} dashboards in portfolio", dashboards.size());
-            for (Dashboard dashboard : dashboards) {
-                logger.info("Dashboard: id={}, name={}, columns={}", 
-                    dashboard.getId(), dashboard.getName(), dashboard.getColumns().size());
-            }
-            fileInfo.setDashboards(DashboardConverter.toDtoList(dashboards));
-            logger.info("Set {} dashboards in fileInfo", fileInfo.getDashboards() != null ? fileInfo.getDashboards().size() : 0);
-            
-            // Force a simple test dashboard to see if serialization works
-            if (fileInfo.getDashboards() == null || fileInfo.getDashboards().isEmpty()) {
-                logger.info("No dashboards found, creating test dashboard");
-                List<DashboardDto> testDashboards = new ArrayList<>();
-                DashboardDto testDashboard = new DashboardDto();
-                testDashboard.setId("test-id");
-                testDashboard.setName("Test Dashboard");
-                testDashboards.add(testDashboard);
-                fileInfo.setDashboards(testDashboards);
-                logger.info("Set test dashboard in fileInfo");
-            }
-        } else {
-            // Set default values when client is not available
-            fileInfo.setBaseCurrency("EUR"); // Default currency
-            fileInfo.setVersion(0); // Unknown version
-            fileInfo.setSecuritiesCount(0);
-            fileInfo.setAccountsCount(0);
-            fileInfo.setPortfoliosCount(0);
-            fileInfo.setTransactionsCount(0);
-            
-            fileInfo.setClientLoaded(false);
-            fileInfo.setClientInfo("Client creation failed - OSGi dependencies not available");
+        return fileInfo;
+    }
+    
+    /**
+     * Populates the file info with client-specific data.
+     * 
+     * @param fileInfo The file info to populate
+     * @param client The loaded client (may be null)
+     * @param file The file
+     */
+    private void populateClientData(PortfolioFileInfo fileInfo, Client client, File file) {
+        if (client == null) {
+            setDefaultClientData(fileInfo);
+            return;
         }
         
-        return fileInfo;
+        fileInfo.setBaseCurrency(client.getBaseCurrency());
+        fileInfo.setVersion(client.getFileVersionAfterRead());
+        fileInfo.setSecuritiesCount(client.getSecurities().size());
+        fileInfo.setAccountsCount(client.getAccounts().size());
+        fileInfo.setPortfoliosCount(client.getPortfolios().size());
+        fileInfo.setTransactionsCount(client.getAllTransactions().size());
+        fileInfo.setClientLoaded(true);
+        fileInfo.setClientInfo("Client loaded successfully");
+        
+        loadDashboards(fileInfo, client);
+        loadReportingPeriods(fileInfo, client, file);
+    }
+    
+    /**
+     * Sets default values when client is not available.
+     * 
+     * @param fileInfo The file info to populate with defaults
+     */
+    private void setDefaultClientData(PortfolioFileInfo fileInfo) {
+        fileInfo.setBaseCurrency("EUR");
+        fileInfo.setVersion(0);
+        fileInfo.setSecuritiesCount(0);
+        fileInfo.setAccountsCount(0);
+        fileInfo.setPortfoliosCount(0);
+        fileInfo.setTransactionsCount(0);
+        fileInfo.setClientLoaded(false);
+        fileInfo.setClientInfo("Client creation failed - OSGi dependencies not available");
+    }
+    
+    /**
+     * Loads and converts dashboards.
+     * 
+     * @param fileInfo The file info to populate
+     * @param client The loaded client
+     */
+    private void loadDashboards(PortfolioFileInfo fileInfo, Client client) {
+        List<Dashboard> dashboards = client.getDashboards().collect(Collectors.toList());
+        logger.info("Found {} dashboards in portfolio", dashboards.size());
+        
+        for (Dashboard dashboard : dashboards) {
+            logger.info("Dashboard: id={}, name={}, columns={}", 
+                dashboard.getId(), dashboard.getName(), dashboard.getColumns().size());
+        }
+        
+        fileInfo.setDashboards(DashboardConverter.toDtoList(dashboards));
+        logger.info("Set {} dashboards in fileInfo", 
+            fileInfo.getDashboards() != null ? fileInfo.getDashboards().size() : 0);
+        
+        // Add test dashboard if none exist (for testing serialization)
+        if (fileInfo.getDashboards() == null || fileInfo.getDashboards().isEmpty()) {
+            addTestDashboard(fileInfo);
+        }
+    }
+    
+    /**
+     * Adds a test dashboard for serialization testing.
+     * 
+     * @param fileInfo The file info to add the test dashboard to
+     */
+    private void addTestDashboard(PortfolioFileInfo fileInfo) {
+        logger.info("No dashboards found, creating test dashboard");
+        List<DashboardDto> testDashboards = new ArrayList<>();
+        DashboardDto testDashboard = new DashboardDto();
+        testDashboard.setId("test-id");
+        testDashboard.setName("Test Dashboard");
+        testDashboards.add(testDashboard);
+        fileInfo.setDashboards(testDashboards);
+        logger.info("Set test dashboard in fileInfo");
+    }
+    
+    /**
+     * Loads and converts reporting periods directly from client configuration.
+     * 
+     * @param fileInfo The file info to populate
+     * @param client The loaded client
+     * @param file The file (unused, kept for signature compatibility)
+     */
+    private void loadReportingPeriods(PortfolioFileInfo fileInfo, Client client, File file) {
+        try {
+            logger.info("Loading reporting periods from client configuration");
+            
+            // Load periods from client settings configuration set
+            List<ReportingPeriod> periods = client.getSettings()
+                    .getConfigurationSet(WellKnownConfigurationSets.REPORTING_PERIODS)
+                    .getConfigurations()
+                    .map(c -> parseReportingPeriod(c.getData()))
+                    .filter(java.util.Optional::isPresent)
+                    .map(java.util.Optional::get)
+                    .collect(Collectors.toList());
+            
+            // If no periods found, use defaults
+            if (periods.isEmpty()) {
+                logger.info("No reporting periods found in configuration, using defaults");
+                periods = getDefaultReportingPeriods();
+            }
+            
+            // Convert to DTOs
+            List<ReportingPeriodDto> periodDtos = convertReportingPeriodsToDto(periods);
+            fileInfo.setReportingPeriods(periodDtos);
+            logger.info("Set {} reporting periods in fileInfo", periodDtos.size());
+            
+        } catch (Exception e) {
+            logger.error("Failed to load reporting periods", e);
+            // Continue without reporting periods
+        }
+    }
+    
+    /**
+     * Parses a reporting period from its string code.
+     * 
+     * @param code The reporting period code
+     * @return Optional containing the ReportingPeriod if valid
+     */
+    private java.util.Optional<ReportingPeriod> parseReportingPeriod(String code) {
+        try {
+            return java.util.Optional.of(ReportingPeriod.from(code));
+        } catch (IOException | RuntimeException e) {
+            logger.warn("Failed to parse reporting period code: {}", code, e);
+            return java.util.Optional.empty();
+        }
+    }
+    
+    /**
+     * Gets default reporting periods (last 1, 2, and 3 years).
+     * 
+     * @return List of default ReportingPeriod objects
+     */
+    private List<ReportingPeriod> getDefaultReportingPeriods() {
+        List<ReportingPeriod> defaults = new ArrayList<>();
+        for (int ii = 1; ii <= 3; ii++) {
+            defaults.add(new ReportingPeriod.LastX(ii, 0));
+        }
+        return defaults;
+    }
+    
+    /**
+     * Converts ReportingPeriod objects to DTOs.
+     * 
+     * @param periods The reporting periods to convert
+     * @return List of ReportingPeriodDto
+     */
+    private List<ReportingPeriodDto> convertReportingPeriodsToDto(List<ReportingPeriod> periods) {
+        List<ReportingPeriodDto> periodDtos = new ArrayList<>();
+        
+        for (ReportingPeriod period : periods) {
+            ReportingPeriodDto dto = new ReportingPeriodDto();
+            dto.setCode(period.getCode());
+            dto.setLabel(period.toString());
+            
+            try {
+                var interval = period.toInterval(LocalDate.now());
+                dto.setStartDate(interval.getStart());
+                dto.setEndDate(interval.getEnd());
+            } catch (Exception e) {
+                logger.warn("Failed to get interval for reporting period: {}", period.getCode(), e);
+            }
+            
+            periodDtos.add(dto);
+            logger.debug("Converted ReportingPeriod: code={}, label={}", dto.getCode(), dto.getLabel());
+        }
+        
+        return periodDtos;
     }
     
     /**

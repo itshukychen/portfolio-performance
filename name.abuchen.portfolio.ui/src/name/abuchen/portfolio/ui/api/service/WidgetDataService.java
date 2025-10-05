@@ -79,6 +79,8 @@ public class WidgetDataService {
         try {
             // Create DashboardData using the provided Client
             DashboardData dashboardData = createDashboardData(client);
+            logger.info("Default Reporting period: {}", dashboardData.getDefaultReportingPeriod());
+            logger.info("List Reporting period: {}", dashboardData.getDefaultReportingPeriods());
             
             if (dashboardData == null) {
                 logger.warn("DashboardData is null for client, returning empty widget data");
