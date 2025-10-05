@@ -160,7 +160,7 @@ public class ClientPerformanceSnapshot
 
     public enum CategoryType
     {
-        INITIAL_VALUE, CAPITAL_GAINS, REALIZED_CAPITAL_GAINS, EARNINGS, FEES, TAXES, CURRENCY_GAINS, TRANSFERS, FINAL_VALUE
+        INITIAL_VALUE, CAPITAL_GAINS, FOREX_CAPITAL_GAINS, REALIZED_CAPITAL_GAINS, EARNINGS, FEES, TAXES, CURRENCY_GAINS, TRANSFERS, FINAL_VALUE
     }
 
     private final Client client;
@@ -269,6 +269,7 @@ public class ClientPerformanceSnapshot
             switch (entry.getKey())
             {
                 case CAPITAL_GAINS:
+                case FOREX_CAPITAL_GAINS:
                 case REALIZED_CAPITAL_GAINS:
                 case EARNINGS:
                 case CURRENCY_GAINS:
@@ -296,7 +297,7 @@ public class ClientPerformanceSnapshot
     public double getPortfolioTaxRate()
     {
         Money numerator = getValue(CategoryType.TAXES);
-        Money denominator = getValue(CategoryType.CAPITAL_GAINS, CategoryType.REALIZED_CAPITAL_GAINS,
+        Money denominator = getValue(CategoryType.CAPITAL_GAINS, CategoryType.FOREX_CAPITAL_GAINS, CategoryType.REALIZED_CAPITAL_GAINS,
                         CategoryType.EARNINGS).subtract(getValue(CategoryType.FEES));
 
         if (denominator.isZero())
@@ -316,7 +317,7 @@ public class ClientPerformanceSnapshot
     public double getPortfolioFeeRate()
     {
         Money numerator = getValue(CategoryType.FEES);
-        Money denominator = getValue(CategoryType.CAPITAL_GAINS, CategoryType.REALIZED_CAPITAL_GAINS,
+        Money denominator = getValue(CategoryType.CAPITAL_GAINS, CategoryType.FOREX_CAPITAL_GAINS, CategoryType.REALIZED_CAPITAL_GAINS,
                         CategoryType.EARNINGS);
 
         if (denominator.isZero())
@@ -337,6 +338,7 @@ public class ClientPerformanceSnapshot
         Money zero = Money.of(converter.getTermCurrency(), 0);
 
         categories.put(CategoryType.CAPITAL_GAINS, new Category(Messages.ColumnCapitalGains, "+", zero)); //$NON-NLS-1$
+        categories.put(CategoryType.FOREX_CAPITAL_GAINS, new Category(Messages.ColumnForexCapitalGains, "+", zero)); //$NON-NLS-1$
         categories.put(CategoryType.REALIZED_CAPITAL_GAINS,
                         new Category(Messages.LabelRealizedCapitalGains, "+", zero)); //$NON-NLS-1$
         categories.put(CategoryType.EARNINGS, new Category(Messages.ColumnEarnings, "+", zero)); //$NON-NLS-1$
@@ -373,12 +375,15 @@ public class ClientPerformanceSnapshot
                         snapshotStart, snapshotEnd, SecurityPerformanceIndicator.CapitalGains.class);
 
         Category realizedCapitalGains = categories.get(CategoryType.REALIZED_CAPITAL_GAINS);
-        addCapitalGains(realizedCapitalGains, securityPerformance, record -> record.getRealizedCapitalGains());
+        addCapitalGains(realizedCapitalGains, securityPerformance, record -> record.getRealizedCapitalGains(), Position::getValue);
 
         // create position for unrealized capital gains
 
         Category capitalGains = categories.get(CategoryType.CAPITAL_GAINS);
-        addCapitalGains(capitalGains, securityPerformance, record -> record.getUnrealizedCapitalGains());
+        addCapitalGains(capitalGains, securityPerformance, record -> record.getUnrealizedCapitalGains(), Position::getValue);
+
+        Category forexCapitalGains = categories.get(CategoryType.FOREX_CAPITAL_GAINS);
+        addCapitalGains(forexCapitalGains, securityPerformance, record -> record.getUnrealizedCapitalGains(), Position::getForexGain);
     }
 
     /**
@@ -393,16 +398,19 @@ public class ClientPerformanceSnapshot
                         snapshotStart, snapshotEnd, SecurityPerformanceIndicator.CapitalGains.class);
 
         Category realizedCapitalGains = categories.get(CategoryType.REALIZED_CAPITAL_GAINS);
-        addCapitalGains(realizedCapitalGains, securityPerformance, record -> record.getRealizedCapitalGainsMovingAvg());
+        addCapitalGains(realizedCapitalGains, securityPerformance, record -> record.getRealizedCapitalGainsMovingAvg(), Position::getValue);
 
         // create position for unrealized capital gains
 
         Category capitalGains = categories.get(CategoryType.CAPITAL_GAINS);
-        addCapitalGains(capitalGains, securityPerformance, record -> record.getUnrealizedCapitalGainsMovingAvg());
+        addCapitalGains(capitalGains, securityPerformance, record -> record.getUnrealizedCapitalGainsMovingAvg(), Position::getValue);
+
+        Category forexCapitalGains = categories.get(CategoryType.FOREX_CAPITAL_GAINS);
+        addCapitalGains(forexCapitalGains, securityPerformance, record -> record.getUnrealizedCapitalGainsMovingAvg(), Position::getForexGain);
     }
 
     private void addCapitalGains(Category category, SecurityPerformanceSnapshot securityPerformance,
-                    Function<SecurityPerformanceRecord, CapitalGainsRecord> mapper)
+                    Function<SecurityPerformanceRecord, CapitalGainsRecord> mapper, Function<Position, Money> positionMapper)
     {
         category.positions = securityPerformance.getRecords().stream()
                         .sorted((p1, p2) -> TextUtil.compare(p1.getSecurityName(), p2.getSecurityName())) //
@@ -414,7 +422,7 @@ public class ClientPerformanceSnapshot
                         .collect(Collectors.toList());
 
         category.valuation = category.positions.stream() //
-                        .map(Position::getValue) //
+                        .map(positionMapper) //
                         .collect(MoneyCollectors.sum(converter.getTermCurrency()));
     }
 

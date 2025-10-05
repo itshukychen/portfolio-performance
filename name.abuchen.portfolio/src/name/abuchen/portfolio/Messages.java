@@ -20,6 +20,7 @@ public class Messages extends NLS
     public static String BalanceCheckFutureTransactionsWithMatchingValue;
     public static String BalanceCheckTransactionsOnOtherAccountWithMatchingValue;
     public static String ColumnCapitalGains;
+    public static String ColumnForexCapitalGains;
     public static String ColumnCurrencyGains;
     public static String ColumnEarnings;
     public static String ColumnFinalValue;

@@ -289,9 +289,13 @@ public class PerformanceCalculationWidgetData {
             posData.put("label", position.getLabel());
             posData.put("value", Values.Money.format(position.getValue()));
             posData.put("rawValue", position.getValue().getAmount());
-            posData.put("currency", position.getValue().getCurrencyCode());
+            if (position.getForexGain() != null) {
+                posData.put("forexGain", Values.Money.format(position.getForexGain()));
+                posData.put("rawForexGain", position.getForexGain().getAmount());
+            }
             
             if (position.getSecurity() != null) {
+                posData.put("currency", position.getSecurity().getCurrencyCode());
                 posData.put("security", position.getSecurity().getName());
                 posData.put("securityUuid", position.getSecurity().getUUID());
                 

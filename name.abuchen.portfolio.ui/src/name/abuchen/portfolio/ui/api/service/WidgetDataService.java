@@ -137,20 +137,25 @@ public class WidgetDataService {
     }
     
     /**
-     * Get widget configuration, optionally overriding the reporting period.
+     * Get widget configuration, optionally setting the reporting period if not already present.
      * 
      * @param dashboardWidget The Dashboard.Widget object
-     * @param reportingPeriodCode Optional reporting period code to override
+     * @param reportingPeriodCode Optional reporting period code to use if widget doesn't have one
      * @return Widget configuration map
      */
     private Map<String, String> getWidgetConfiguration(Dashboard.Widget dashboardWidget, String reportingPeriodCode) {
         // Get the original configuration from the widget
         Map<String, String> config = new HashMap<>(dashboardWidget.getConfiguration());
         
-        // Override REPORTING_PERIOD if a code is provided
+        // Only set REPORTING_PERIOD if a code is provided AND it doesn't already exist in the config
         if (reportingPeriodCode != null && !reportingPeriodCode.trim().isEmpty()) {
-            logger.info("Overriding REPORTING_PERIOD config with code: {}", reportingPeriodCode);
-            config.put(Dashboard.Config.REPORTING_PERIOD.name(), reportingPeriodCode);
+            String existingPeriod = config.get(Dashboard.Config.REPORTING_PERIOD.name());
+            if (existingPeriod == null || existingPeriod.trim().isEmpty()) {
+                logger.info("Setting REPORTING_PERIOD config with code: {}", reportingPeriodCode);
+                config.put(Dashboard.Config.REPORTING_PERIOD.name(), reportingPeriodCode);
+            } else {
+                logger.debug("Widget already has REPORTING_PERIOD config ({}), not overriding", existingPeriod);
+            }
         }
         
         return config;

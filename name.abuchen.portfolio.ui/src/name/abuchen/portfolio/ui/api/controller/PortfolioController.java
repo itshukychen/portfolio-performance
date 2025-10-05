@@ -252,11 +252,6 @@ public class PortfolioController {
             
             Dashboard.Widget widget = widgets.get(widgetIndex);
             
-            // Log reporting period code if provided
-            if (reportingPeriodCode != null && !reportingPeriodCode.trim().isEmpty()) {
-                logger.info("Overriding widget reporting period with code: {}", reportingPeriodCode);
-            }
-            
             // Use WidgetDataService to get widget data with the Dashboard.Widget object
             Map<String, Object> widgetData = widgetDataService.getWidgetData(widget, client, reportingPeriodCode);
             
