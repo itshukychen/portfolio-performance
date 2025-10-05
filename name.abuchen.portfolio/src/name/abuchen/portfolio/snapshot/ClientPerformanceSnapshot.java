@@ -374,16 +374,7 @@ public class ClientPerformanceSnapshot
         SecurityPerformanceSnapshot securityPerformance = SecurityPerformanceSnapshot.create(client, converter, period,
                         snapshotStart, snapshotEnd, SecurityPerformanceIndicator.CapitalGains.class);
 
-        Category realizedCapitalGains = categories.get(CategoryType.REALIZED_CAPITAL_GAINS);
-        addCapitalGains(realizedCapitalGains, securityPerformance, record -> record.getRealizedCapitalGains(), Position::getValue);
-
-        // create position for unrealized capital gains
-
-        Category capitalGains = categories.get(CategoryType.CAPITAL_GAINS);
-        addCapitalGains(capitalGains, securityPerformance, record -> record.getUnrealizedCapitalGains(), Position::getValue);
-
-        Category forexCapitalGains = categories.get(CategoryType.FOREX_CAPITAL_GAINS);
-        addCapitalGains(forexCapitalGains, securityPerformance, record -> record.getUnrealizedCapitalGains(), Position::getForexGain);
+        addCapitalGains(securityPerformance, record -> record.getUnrealizedCapitalGains(), record -> record.getRealizedCapitalGains());
     }
 
     /**
@@ -397,32 +388,47 @@ public class ClientPerformanceSnapshot
         SecurityPerformanceSnapshot securityPerformance = SecurityPerformanceSnapshot.create(client, converter, period,
                         snapshotStart, snapshotEnd, SecurityPerformanceIndicator.CapitalGains.class);
 
-        Category realizedCapitalGains = categories.get(CategoryType.REALIZED_CAPITAL_GAINS);
-        addCapitalGains(realizedCapitalGains, securityPerformance, record -> record.getRealizedCapitalGainsMovingAvg(), Position::getValue);
-
-        // create position for unrealized capital gains
-
-        Category capitalGains = categories.get(CategoryType.CAPITAL_GAINS);
-        addCapitalGains(capitalGains, securityPerformance, record -> record.getUnrealizedCapitalGainsMovingAvg(), Position::getValue);
-
-        Category forexCapitalGains = categories.get(CategoryType.FOREX_CAPITAL_GAINS);
-        addCapitalGains(forexCapitalGains, securityPerformance, record -> record.getUnrealizedCapitalGainsMovingAvg(), Position::getForexGain);
+        addCapitalGains(securityPerformance, record -> record.getUnrealizedCapitalGainsMovingAvg(), record -> record.getRealizedCapitalGainsMovingAvg());
     }
 
-    private void addCapitalGains(Category category, SecurityPerformanceSnapshot securityPerformance,
-                    Function<SecurityPerformanceRecord, CapitalGainsRecord> mapper, Function<Position, Money> positionMapper)
+    private void addCapitalGains(SecurityPerformanceSnapshot securityPerformance,
+                    Function<SecurityPerformanceRecord, CapitalGainsRecord> unrealizedMapper, Function<SecurityPerformanceRecord, CapitalGainsRecord> realizedMapper)
     {
-        category.positions = securityPerformance.getRecords().stream()
+        Category realizedCapitalGains = categories.get(CategoryType.REALIZED_CAPITAL_GAINS);
+        realizedCapitalGains.positions = securityPerformance.getRecords().stream()
                         .sorted((p1, p2) -> TextUtil.compare(p1.getSecurityName(), p2.getSecurityName())) //
-                        .map(mapper)
-                        .filter(gains -> !gains.getCapitalGains().isZero() || !gains.getForexCaptialGains().isZero())
+                        .map(realizedMapper)
+                        .filter(gains -> !gains.getCapitalGains().isZero())
                         .map(gains -> new Position(gains.getSecurity(), gains.getCapitalGains(),
                                         gains.getCapitalGainsTrail(), gains.getForexCaptialGains(),
                                         gains.getForexCapitalGainsTrail())) //
                         .collect(Collectors.toList());
+        realizedCapitalGains.valuation = realizedCapitalGains.positions.stream() //
+                        .map(Position::getValue) //
+                        .collect(MoneyCollectors.sum(converter.getTermCurrency()));
 
-        category.valuation = category.positions.stream() //
-                        .map(positionMapper) //
+        Category unrealizedCapitalGains = categories.get(CategoryType.CAPITAL_GAINS);
+        unrealizedCapitalGains.positions = securityPerformance.getRecords().stream()
+                        .sorted((p1, p2) -> TextUtil.compare(p1.getSecurityName(), p2.getSecurityName())) //
+                        .map(unrealizedMapper)
+                        .filter(gains -> !gains.getCapitalGains().isZero())
+                        .map(gains -> new Position(gains.getSecurity(), gains.getCapitalGains().subtract(gains.getForexCaptialGains()),
+                                        gains.getCapitalGainsTrail())) //
+                        .collect(Collectors.toList());
+        unrealizedCapitalGains.valuation = unrealizedCapitalGains.positions.stream() //
+                        .map(Position::getValue) //
+                        .collect(MoneyCollectors.sum(converter.getTermCurrency()));
+
+        Category unrealizedForexCapitalGains = categories.get(CategoryType.FOREX_CAPITAL_GAINS);
+        unrealizedForexCapitalGains.positions = securityPerformance.getRecords().stream()
+                        .sorted((p1, p2) -> TextUtil.compare(p1.getSecurityName(), p2.getSecurityName())) //
+                        .map(unrealizedMapper)
+                        .filter(gains -> !gains.getForexCaptialGains().isZero())
+                        .map(gains -> new Position(gains.getSecurity(), gains.getForexCaptialGains(),
+                                        gains.getForexCapitalGainsTrail())) //
+                        .collect(Collectors.toList());
+        unrealizedForexCapitalGains.valuation = unrealizedForexCapitalGains.positions.stream() //
+                        .map(Position::getValue) //
                         .collect(MoneyCollectors.sum(converter.getTermCurrency()));
     }
 
