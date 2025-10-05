@@ -42,6 +42,22 @@ public class PortfolioController {
     private static final WidgetDataService widgetDataService = new WidgetDataService();
     
     /**
+     * Helper method to create error responses with consistent structure.
+     * 
+     * @param status HTTP status code
+     * @param error Error type/category
+     * @param message Detailed error message
+     * @return Response with error details
+     */
+    private Response createErrorResponse(Response.Status status, String error, String message) {
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("error", error);
+        errorResponse.put("message", message);
+        return Response.status(status).entity(errorResponse).build();
+    }
+    
+    /**
      * List all portfolios in the portfolio directory.
      * 
      * @return List of portfolios
@@ -154,6 +170,7 @@ public class PortfolioController {
      * @param dashboardId The dashboard ID
      * @param columnIndex The column index
      * @param widgetIndex The widget index within the column
+     * @param reportingPeriodCode Optional reporting period code to override widget configuration
      * @return Widget data
      */
     @GET
@@ -162,36 +179,31 @@ public class PortfolioController {
     public Response getWidget(@PathParam("portfolioId") String portfolioId,
                             @QueryParam("dashboardId") String dashboardId,
                             @QueryParam("columnIndex") Integer columnIndex,
-                            @QueryParam("widgetIndex") Integer widgetIndex) {
+                            @QueryParam("widgetIndex") Integer widgetIndex,
+                            @QueryParam("reportingPeriodCode") String reportingPeriodCode) {
         try {
             logger.info("Getting widget for portfolio " + portfolioId + ", dashboard " + dashboardId + ", column " + columnIndex + ", widget " + widgetIndex);
             
             // Validate required query parameters
             if (dashboardId == null || dashboardId.trim().isEmpty()) {
                 logger.warn("Missing required parameter: dashboardId");
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "Missing required parameter");
-                errorResponse.put("message", "dashboardId query parameter is required");
-                return Response.status(Response.Status.BAD_REQUEST).entity(errorResponse).build();
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Missing required parameter", 
+                    "dashboardId query parameter is required");
             }
             
             if (columnIndex == null) {
                 logger.warn("Missing required parameter: columnIndex");
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "Missing required parameter");
-                errorResponse.put("message", "columnIndex query parameter is required");
-                return Response.status(Response.Status.BAD_REQUEST).entity(errorResponse).build();
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Missing required parameter", 
+                    "columnIndex query parameter is required");
             }
             
             if (widgetIndex == null) {
                 logger.warn("Missing required parameter: widgetIndex");
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "Missing required parameter");
-                errorResponse.put("message", "widgetIndex query parameter is required");
-                return Response.status(Response.Status.BAD_REQUEST).entity(errorResponse).build();
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Missing required parameter", 
+                    "widgetIndex query parameter is required");
             }
             
             // Get the cached Client for this portfolio
@@ -200,11 +212,9 @@ public class PortfolioController {
             
             if (client == null) {
                 logger.warn("No cached client found for portfolio: " + portfolioId);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "Portfolio not loaded");
-                errorResponse.put("message", "Portfolio must be opened first before accessing widgets");
-                return Response.status(Response.Status.NOT_FOUND).entity(errorResponse).build();
+                return createErrorResponse(Response.Status.NOT_FOUND, 
+                    "Portfolio not loaded", 
+                    "Portfolio must be opened first before accessing widgets");
             }
             
             // Find the dashboard by ID
@@ -215,11 +225,9 @@ public class PortfolioController {
             
             if (dashboard == null) {
                 logger.warn("Dashboard not found: " + dashboardId + " in portfolio: " + portfolioId);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "Dashboard not found");
-                errorResponse.put("message", "Dashboard with ID " + dashboardId + " not found");
-                return Response.status(Response.Status.NOT_FOUND).entity(errorResponse).build();
+                return createErrorResponse(Response.Status.NOT_FOUND, 
+                    "Dashboard not found", 
+                    "Dashboard with ID " + dashboardId + " not found");
             }
             
             // Get the columns from the dashboard
@@ -227,11 +235,9 @@ public class PortfolioController {
             
             if (columnIndex < 0 || columnIndex >= columns.size()) {
                 logger.warn("Column index out of bounds: " + columnIndex + " (dashboard has " + columns.size() + " columns)");
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "Column index out of bounds");
-                errorResponse.put("message", "Column index " + columnIndex + " is out of bounds (0-" + (columns.size() - 1) + ")");
-                return Response.status(Response.Status.BAD_REQUEST).entity(errorResponse).build();
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Column index out of bounds", 
+                    "Column index " + columnIndex + " is out of bounds (0-" + (columns.size() - 1) + ")");
             }
             
             Dashboard.Column column = columns.get(columnIndex);
@@ -239,17 +245,20 @@ public class PortfolioController {
             
             if (widgetIndex < 0 || widgetIndex >= widgets.size()) {
                 logger.warn("Widget index out of bounds: " + widgetIndex + " (column has " + widgets.size() + " widgets)");
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "Widget index out of bounds");
-                errorResponse.put("message", "Widget index " + widgetIndex + " is out of bounds (0-" + (widgets.size() - 1) + ")");
-                return Response.status(Response.Status.BAD_REQUEST).entity(errorResponse).build();
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Widget index out of bounds", 
+                    "Widget index " + widgetIndex + " is out of bounds (0-" + (widgets.size() - 1) + ")");
             }
             
             Dashboard.Widget widget = widgets.get(widgetIndex);
             
+            // Log reporting period code if provided
+            if (reportingPeriodCode != null && !reportingPeriodCode.trim().isEmpty()) {
+                logger.info("Overriding widget reporting period with code: {}", reportingPeriodCode);
+            }
+            
             // Use WidgetDataService to get widget data with the Dashboard.Widget object
-            Map<String, Object> widgetData = widgetDataService.getWidgetData(widget, client);
+            Map<String, Object> widgetData = widgetDataService.getWidgetData(widget, client, reportingPeriodCode);
             
             // Add portfolio context to the response
             Map<String, Object> response = new HashMap<>();
@@ -263,11 +272,9 @@ public class PortfolioController {
             
         } catch (Exception e) {
             logger.error("Unexpected error getting widget for portfolio " + portfolioId + ", dashboard " + dashboardId + ", column " + columnIndex + ", widget " + widgetIndex + ": " + e.getMessage());
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Internal server error");
-            errorResponse.put("message", e.getMessage());
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(errorResponse).build();
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
         }
     }
     

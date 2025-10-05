@@ -44,36 +44,48 @@ public class WidgetDataService {
      * 
      * @param dashboardWidget The Dashboard.Widget object
      * @param client The portfolio Client instance
+     * @param reportingPeriodCode Optional reporting period code to override widget configuration
      * @return Widget data as a Map
      */
-    public Map<String, Object> getWidgetData(Dashboard.Widget dashboardWidget, Client client) {
+    public Map<String, Object> getWidgetData(Dashboard.Widget dashboardWidget, Client client, String reportingPeriodCode) {
         // Marshal all SWT work to the UI thread since this is called from REST handlers
-        return UI.sync(() -> getWidgetDataInternal(dashboardWidget, client));
+        return UI.sync(() -> getWidgetDataInternal(dashboardWidget, client, reportingPeriodCode));
+    }
+    
+    /**
+     * Helper method to create error data with consistent structure.
+     * 
+     * @param dashboardWidget The widget (optional, can be null)
+     * @param message Error message
+     * @return Error data map
+     */
+    private Map<String, Object> createErrorData(Dashboard.Widget dashboardWidget, String message) {
+        Map<String, Object> errorData = new HashMap<>();
+        if (dashboardWidget != null) {
+            errorData.put("widgetId", dashboardWidget.getLabel());
+            errorData.put("type", dashboardWidget.getType());
+            errorData.put("config", dashboardWidget.getConfiguration());
+        }
+        errorData.put("message", message);
+        errorData.put("timestamp", java.time.LocalDateTime.now().toString());
+        return errorData;
     }
     
     /**
      * Internal implementation of getWidgetData that runs on the UI thread.
      * This method and everything it calls may touch SWT resources (Colors, Fonts, etc.)
      */
-    private Map<String, Object> getWidgetDataInternal(Dashboard.Widget dashboardWidget, Client client) {
+    private Map<String, Object> getWidgetDataInternal(Dashboard.Widget dashboardWidget, Client client, String reportingPeriodCode) {
         logger.info("Getting widget data for Dashboard.Widget: {} with client", dashboardWidget);
         
         if (dashboardWidget == null) {
             logger.warn("Dashboard.Widget is null, returning empty widget data");
-            Map<String, Object> emptyData = new HashMap<>();
-            emptyData.put("message", "Dashboard.Widget is null");
-            emptyData.put("timestamp", java.time.LocalDateTime.now().toString());
-            return emptyData;
+            return createErrorData(null, "Dashboard.Widget is null");
         }
         
         if (client == null) {
             logger.warn("Client is null, returning empty widget data");
-            Map<String, Object> emptyData = new HashMap<>();
-            emptyData.put("widgetId", dashboardWidget.getLabel());
-            emptyData.put("type", dashboardWidget.getType());
-            emptyData.put("message", "Client is null");
-            emptyData.put("timestamp", java.time.LocalDateTime.now().toString());
-            return emptyData;
+            return createErrorData(dashboardWidget, "Client is null");
         }
         
         try {
@@ -84,22 +96,17 @@ public class WidgetDataService {
             
             if (dashboardData == null) {
                 logger.warn("DashboardData is null for client, returning empty widget data");
-                
-                // Return empty widget data when DashboardData is not available
-                Map<String, Object> emptyData = new HashMap<>();
-                emptyData.put("widgetId", dashboardWidget.getLabel());
-                emptyData.put("type", dashboardWidget.getType());
-                emptyData.put("config", dashboardWidget.getConfiguration());
-                emptyData.put("message", "DashboardData not available - requires UI dependencies");
-                emptyData.put("timestamp", java.time.LocalDateTime.now().toString());
-                return emptyData;
+                return createErrorData(dashboardWidget, "DashboardData not available - requires UI dependencies");
             }
             
-            // Create Widget wrapper from Dashboard.Widget
+            // Get widget configuration, potentially overriding the reporting period
+            Map<String, String> widgetConfig = getWidgetConfiguration(dashboardWidget, reportingPeriodCode);
+            
+            // Create Widget wrapper from Dashboard.Widget with potentially modified configuration
             Widget widget = new Widget(
                 dashboardWidget.getLabel(),
                 dashboardWidget.getType(),
-                dashboardWidget.getConfiguration()
+                widgetConfig
             );
             
             // Get the widget type from the Dashboard.Widget
@@ -110,12 +117,7 @@ public class WidgetDataService {
             
             if (factory == null) {
                 logger.warn("No WidgetDataFactory found for type: {}", widgetType);
-                Map<String, Object> errorData = new HashMap<>();
-                errorData.put("widgetId", dashboardWidget.getLabel());
-                errorData.put("type", widgetType);
-                errorData.put("message", "Unknown widget type: " + widgetType);
-                errorData.put("timestamp", java.time.LocalDateTime.now().toString());
-                return errorData;
+                return createErrorData(dashboardWidget, "Unknown widget type: " + widgetType);
             }
             
             // Generate widget data using the factory
@@ -127,28 +129,31 @@ public class WidgetDataService {
             
         } catch (IllegalArgumentException e) {
             logger.error("Invalid widget type", e);
-            
-            Map<String, Object> widgetData = new HashMap<>();
-            widgetData.put("widgetId", dashboardWidget.getLabel());
-            widgetData.put("type", dashboardWidget.getType());
-            widgetData.put("config", dashboardWidget.getConfiguration());
-            widgetData.put("message", "Invalid widget type: " + dashboardWidget.getType());
-            widgetData.put("timestamp", java.time.LocalDateTime.now().toString());
-            
-            return widgetData;
+            return createErrorData(dashboardWidget, "Invalid widget type: " + dashboardWidget.getType());
         } catch (Exception e) {
             logger.error("Failed to get widget data", e);
-            
-            // Return generic response for errors
-            Map<String, Object> widgetData = new HashMap<>();
-            widgetData.put("widgetId", dashboardWidget.getLabel());
-            widgetData.put("type", dashboardWidget.getType());
-            widgetData.put("config", dashboardWidget.getConfiguration());
-            widgetData.put("message", "Error getting widget data: " + e.getMessage());
-            widgetData.put("timestamp", java.time.LocalDateTime.now().toString());
-            
-            return widgetData;
+            return createErrorData(dashboardWidget, "Error getting widget data: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Get widget configuration, optionally overriding the reporting period.
+     * 
+     * @param dashboardWidget The Dashboard.Widget object
+     * @param reportingPeriodCode Optional reporting period code to override
+     * @return Widget configuration map
+     */
+    private Map<String, String> getWidgetConfiguration(Dashboard.Widget dashboardWidget, String reportingPeriodCode) {
+        // Get the original configuration from the widget
+        Map<String, String> config = new HashMap<>(dashboardWidget.getConfiguration());
+        
+        // Override REPORTING_PERIOD if a code is provided
+        if (reportingPeriodCode != null && !reportingPeriodCode.trim().isEmpty()) {
+            logger.info("Overriding REPORTING_PERIOD config with code: {}", reportingPeriodCode);
+            config.put(Dashboard.Config.REPORTING_PERIOD.name(), reportingPeriodCode);
+        }
+        
+        return config;
     }
     
     /**
