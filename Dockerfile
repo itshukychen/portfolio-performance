@@ -16,11 +16,16 @@ COPY . .
 
 # Build the server product for Linux
 # This will create the server executable in portfolio-product/target/products/
-RUN mvn -f portfolio-app/pom.xml clean verify \
+RUN mvn -f portfolio-app/pom.xml clean install \
     -Dcheckstyle.skip=true \
-    -DskipTests \
-    -Dmaven.main.skip=true \
-    -pl '!name.abuchen.portfolio:name.abuchen.portfolio.tests,!name.abuchen.portfolio:name.abuchen.portfolio.junit,!name.abuchen.portfolio:name.abuchen.portfolio.bootstrap,!name.abuchen.portfolio:name.abuchen.portfolio.pdfbox3,!name.abuchen.portfolio:name.abuchen.portfolio.pdfbox1'
+    -Dtycho.targetPlatform=portfolio-target-definition/portfolio-target-definition.target \
+    -Dtycho.p2.transport.min-cache-minutes=1800 \
+    -Dtycho.p2.mirrors=false \
+    -Dtarget.os=macosx \
+    -Dtarget.ws=cocoa \
+    -Dtarget.arch=aarch64 \
+    -T 16 -DskipTests \
+    -Dmaven.main.skip=true
 
 # Stage 2: Runtime environment
 FROM eclipse-temurin:21-jre
