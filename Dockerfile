@@ -65,5 +65,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/portfolios/health || exit 1
 
 # Run the server with xvfb (virtual X server for headless SWT)
-CMD ["xvfb-run", "-a", "./server/PortfolioPerformanceServer", "-nosplash", "-consoleLog", "-vmargs", "-Dportfolio.server.port=${PORTFOLIO_SERVER_PORT}", "-Dosgi.instance.area=/app/workspace"]
+CMD ["xvfb-run", "-a", "./server/portfolio-server/PortfolioPerformanceServer", "-nosplash", "-consoleLog", "-vmargs", "-Dportfolio.server.port=${PORTFOLIO_SERVER_PORT}", "-Dosgi.instance.area=/app/workspace"]
 
