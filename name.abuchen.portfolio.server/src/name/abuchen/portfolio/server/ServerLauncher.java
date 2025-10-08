@@ -40,6 +40,11 @@ public class ServerLauncher implements IApplication
     {
         PortfolioLog.info("🚀 Starting Portfolio Performance Server...");
         
+        // Log workspace location for debugging
+        String workspaceLocation = Platform.getInstanceLocation().getURL().getPath();
+        PortfolioLog.info("📁 Workspace location: " + workspaceLocation);
+        PortfolioLog.info("📁 Preferences path: " + workspaceLocation + ".metadata/.plugins/org.eclipse.core.runtime/.settings/");
+        
         // Get port from system property or use default
         int port = getPort();
         
