@@ -312,7 +312,8 @@ public class PortfolioController {
             QuoteFeedApiKeyService.initializeApiKeys();
             
             // Create predicate to filter only active (non-retired) securities
-            Predicate<Security> onlyActive = s -> !s.isRetired();
+            Predicate<Security> onlyActive = s -> !s.isRetired()
+                     && (s.getTickerSymbol() == null || !s.getTickerSymbol().replaceAll("\\s+", "").matches(".*\\d{6}[CP]\\d{8}"));
             
             // Create and schedule the update quotes job with both LATEST and HISTORIC targets
             Job updateJob = new UpdatePricesJob(client, onlyActive,
