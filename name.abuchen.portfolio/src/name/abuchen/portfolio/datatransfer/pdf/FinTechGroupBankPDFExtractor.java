@@ -35,6 +35,7 @@ public class FinTechGroupBankPDFExtractor extends AbstractPDFExtractor
         addBankIdentifier("FinTech Group Bank AG");
         addBankIdentifier("flatex Bank AG");
         addBankIdentifier("flatexDEGIRO Bank AG");
+        addBankIdentifier("ﬂatexDEGIRO Bank AG");
 
         addBuySellTransaction();
         addBuySellCryptoTransaction();
@@ -443,7 +444,7 @@ public class FinTechGroupBankPDFExtractor extends AbstractPDFExtractor
 
         var pdfTransaction = new Transaction<BuySellEntry>();
 
-        var firstRelevantLine = new Block("^Kundenservice(:)?$");
+        var firstRelevantLine = new Block("^Nr\\.[\\d]+\\/[\\d]+[\\s]{1,}.*$");
         type.addBlock(firstRelevantLine);
         firstRelevantLine.set(pdfTransaction);
 

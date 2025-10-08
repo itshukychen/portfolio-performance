@@ -2004,6 +2004,13 @@ public class SBrokerPDFExtractor extends AbstractPDFExtractor
                         .assign((t, v) -> processFeeEntries(t, v, type))
 
                         // @formatter:off
+                        // Fremde Auslagen 6,12- EUR
+                        // @formatter:on
+                        .section("fee", "currency").optional() //
+                        .match("^Fremde Auslagen (?<fee>[\\.,\\d]+)([\\s]+)?\\- (?<currency>[\\w]{3})$") //
+                        .assign((t, v) -> processFeeEntries(t, v, type))
+
+                        // @formatter:off
                         // Transaktionsentgelt Börse 0,60- EUR
                         // @formatter:on
                         .section("fee", "currency").optional() //

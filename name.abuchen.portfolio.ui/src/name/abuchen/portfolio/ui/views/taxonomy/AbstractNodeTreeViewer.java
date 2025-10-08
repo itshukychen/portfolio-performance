@@ -17,7 +17,6 @@ import java.util.stream.Collectors;
 import jakarta.inject.Inject;
 
 import org.eclipse.e4.core.di.extensions.Preference;
-import org.eclipse.e4.ui.services.IStylingEngine;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.MenuManager;
@@ -40,6 +39,7 @@ import org.eclipse.swt.dnd.DragSourceAdapter;
 import org.eclipse.swt.dnd.DragSourceEvent;
 import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.dnd.TransferData;
+import org.eclipse.swt.events.KeyListener;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.widgets.Composite;
@@ -52,14 +52,12 @@ import name.abuchen.portfolio.model.Classification.Assignment;
 import name.abuchen.portfolio.model.InvestmentVehicle;
 import name.abuchen.portfolio.model.Named;
 import name.abuchen.portfolio.model.Security;
-import name.abuchen.portfolio.model.TaxonomyJSONExporter;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.ExchangeRate;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.ui.Images;
 import name.abuchen.portfolio.ui.Messages;
 import name.abuchen.portfolio.ui.UIConstants;
-import name.abuchen.portfolio.ui.dialogs.TaxonomyImportDialog;
 import name.abuchen.portfolio.ui.dnd.SecurityTransfer;
 import name.abuchen.portfolio.ui.editor.AbstractFinanceView;
 import name.abuchen.portfolio.ui.editor.PortfolioPart;
@@ -67,7 +65,6 @@ import name.abuchen.portfolio.ui.selection.SecuritySelection;
 import name.abuchen.portfolio.ui.selection.SelectionService;
 import name.abuchen.portfolio.ui.util.Colors;
 import name.abuchen.portfolio.ui.util.ContextMenu;
-import name.abuchen.portfolio.ui.util.JSONExporterDialog;
 import name.abuchen.portfolio.ui.util.SimpleAction;
 import name.abuchen.portfolio.ui.util.TreeViewerCSVExporter;
 import name.abuchen.portfolio.ui.util.viewers.Column;
@@ -296,9 +293,6 @@ import name.abuchen.portfolio.util.TextUtil;
     @Inject
     private PortfolioPart part;
 
-    @Inject
-    private IStylingEngine stylingEngine;
-
     private boolean useIndirectQuotation = false;
 
     private final AbstractFinanceView view;
@@ -360,6 +354,23 @@ import name.abuchen.portfolio.util.TextUtil;
     public void configMenuAboutToShow(IMenuManager manager)
     {
         support.menuAboutToShow(manager);
+
+        manager.add(new Separator());
+
+        MenuManager sorting = new MenuManager(Messages.MenuTaxonomySortTreeBy);
+        sorting.add(new SimpleAction(
+                        String.join(", ", Messages.MenuTaxonomySortByType, Messages.MenuTaxonomySortByName), //$NON-NLS-1$
+                        a -> doSortRecursively(getModel().getClassificationRootNode(), SortCriterion.TYPE,
+                                        SortCriterion.NAME)));
+        sorting.add(new SimpleAction(String.join(", ", Messages.MenuTaxonomySortByType, Messages.ColumnActualValue), //$NON-NLS-1$
+                        a -> doSortRecursively(getModel().getClassificationRootNode(), SortCriterion.TYPE,
+                                        SortCriterion.ACTUAL)));
+        sorting.add(new SimpleAction(Messages.MenuTaxonomySortByName,
+                        a -> doSortRecursively(getModel().getClassificationRootNode(), SortCriterion.NAME)));
+        sorting.add(new SimpleAction(Messages.ColumnActualValue,
+                        a -> doSortRecursively(getModel().getClassificationRootNode(), SortCriterion.ACTUAL)));
+
+        manager.add(sorting);
     }
 
     @Override
@@ -367,26 +378,6 @@ import name.abuchen.portfolio.util.TextUtil;
     {
         manager.add(new SimpleAction(Messages.MenuExportData, action -> new TreeViewerCSVExporter(nodeViewer)
                         .export(getModel().getTaxonomy().getName() + ".csv"))); //$NON-NLS-1$
-
-        manager.add(new Separator());
-
-        manager.add(new SimpleAction(Messages.MenuExportTaxonomy,
-                        action -> new JSONExporterDialog(nodeViewer.getTree().getShell(),
-                                        new TaxonomyJSONExporter(getModel().getTaxonomy())).export()));
-
-        manager.add(new SimpleAction(Messages.MenuImportTaxonomy, action -> {
-            var dialog = new TaxonomyImportDialog(nodeViewer.getTree().getShell(), stylingEngine,
-                            part.getPreferenceStore(), getModel().getClient(), getModel().getTaxonomy());
-            if (dialog.open() == TaxonomyImportDialog.DIRTY)
-            {
-                // do a complete reload of the view including taxonomy model
-                // because there can be structural changes which are not
-                // reflected in TaxonomyNode objects.
-
-                getModel().getClient().markDirty();
-                part.activateView(TaxonomyView.class, getModel().getTaxonomy());
-            }
-        }));
     }
 
     @Override
@@ -482,6 +473,7 @@ import name.abuchen.portfolio.util.TextUtil;
         nodeViewer.setInput(getModel());
 
         new ContextMenu(nodeViewer.getControl(), this::fillContextMenu).hook();
+        hookKeyListener();
 
         return container;
     }
@@ -936,6 +928,20 @@ import name.abuchen.portfolio.util.TextUtil;
         }
     }
 
+    private void hookKeyListener()
+    {
+        nodeViewer.getControl().addKeyListener(KeyListener.keyPressedAdapter(e -> {
+            var selection = nodeViewer.getStructuredSelection();
+            if (selection.isEmpty() || selection.size() > 1)
+                return;
+
+            var node = (TaxonomyNode) selection.getFirstElement();
+            var security = node.getBackingSecurity();
+            if (security != null)
+                new SecurityContextMenu(view).handleEditKey(e, security);
+        }));
+    }
+
     private void addAvailableAssignments(MenuManager manager, TaxonomyNode targetNode)
     {
         for (final TaxonomyNode assignment : getModel().getUnassignedNode().getChildren())
@@ -1042,7 +1048,33 @@ import name.abuchen.portfolio.util.TextUtil;
         // do not fire model change -> called within modification listener
     }
 
+    /**
+     * Sorts the children of a node and fires an update notification.
+     */
     private void doSort(TaxonomyNode node, SortCriterion... criteria) // NOSONAR
+    {
+        sort(node, false, criteria);
+
+        getModel().markDirty();
+        getModel().fireTaxonomyModelChange(node);
+    }
+
+    /**
+     * Sorts the children of a node recursively and fires an update
+     * notification.
+     */
+    private void doSortRecursively(TaxonomyNode node, SortCriterion... criteria) // NOSONAR
+    {
+        sort(node, true, criteria);
+
+        getModel().markDirty();
+        getModel().fireTaxonomyModelChange(node);
+    }
+
+    /**
+     * Sorts the children of a node, but does not fire update notifications.
+     */
+    private void sort(TaxonomyNode node, boolean recursive, SortCriterion... criteria) // NOSONAR
     {
         Collections.sort(node.getChildren(), (node1, node2) -> { // NOSONAR
             // unassigned category always stays at the end of the list
@@ -1083,7 +1115,13 @@ import name.abuchen.portfolio.util.TextUtil;
         for (TaxonomyNode child : node.getChildren())
             child.setRank(rank++);
 
-        getModel().markDirty();
-        getModel().fireTaxonomyModelChange(node);
+        if (recursive)
+        {
+            for (var child : node.getChildren())
+            {
+                if (child.isClassification())
+                    sort(child, true, criteria);
+            }
+        }
     }
 }
