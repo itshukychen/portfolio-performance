@@ -27,7 +27,7 @@ import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
 import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
 import name.abuchen.portfolio.ui.api.service.WidgetDataService;
-import name.abuchen.portfolio.ui.jobs.UpdateQuotesJob;
+import name.abuchen.portfolio.ui.jobs.priceupdate.UpdatePricesJob;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Dashboard;
 import name.abuchen.portfolio.model.Security;
@@ -315,8 +315,8 @@ public class PortfolioController {
             Predicate<Security> onlyActive = s -> !s.isRetired();
             
             // Create and schedule the update quotes job with both LATEST and HISTORIC targets
-            Job updateJob = new UpdateQuotesJob(client, onlyActive,
-                            EnumSet.of(UpdateQuotesJob.Target.LATEST, UpdateQuotesJob.Target.HISTORIC));
+            Job updateJob = new UpdatePricesJob(client, onlyActive,
+                            EnumSet.of(UpdatePricesJob.Target.LATEST, UpdatePricesJob.Target.HISTORIC));
             updateJob.schedule();
             
             logger.info("Waiting for price update job to complete...");
