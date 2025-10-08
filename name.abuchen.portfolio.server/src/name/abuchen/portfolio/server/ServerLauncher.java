@@ -47,6 +47,9 @@ public class ServerLauncher implements IApplication
         // but don't create any Shell or Window
         Display display = Display.getDefault();
         
+        // Initialize quote feeds to ensure ServiceLoader works (must happen after SPI Fly is ready)
+        initializeQuoteFeeds();
+        
         // Initialize exchange rates (normally done by StartupAddon in UI mode)
         initializeExchangeRates();
         
@@ -148,6 +151,45 @@ public class ServerLauncher implements IApplication
             }
         }
         return DEFAULT_PORT;
+    }
+    
+    /**
+     * Initialize quote feeds by forcing Factory class to load.
+     * This ensures ServiceLoader runs after SPI Fly is ready to intercept it.
+     */
+    private void initializeQuoteFeeds()
+    {
+        PortfolioLog.info("========================================");
+        PortfolioLog.info("Initializing quote feed providers...");
+        PortfolioLog.info("========================================");
+        
+        try
+        {
+            // Force Factory class to load, which triggers ServiceLoader in static initializer
+            int feedCount = name.abuchen.portfolio.online.Factory.getQuoteFeedProvider().size();
+            PortfolioLog.info("✅ Loaded " + feedCount + " quote feed providers");
+            
+            if (feedCount == 0)
+            {
+                PortfolioLog.error("⚠️  WARNING: No quote feed providers found!");
+                PortfolioLog.error("   This likely means ServiceLoader failed to discover feeds.");
+                PortfolioLog.error("   Check that Apache Aries SPI Fly is active and configured correctly.");
+            }
+            else
+            {
+                PortfolioLog.info("   Available feeds:");
+                name.abuchen.portfolio.online.Factory.getQuoteFeedProvider().forEach(feed -> 
+                    PortfolioLog.info("   - " + feed.getName() + " (" + feed.getId() + ")")
+                );
+            }
+        }
+        catch (Exception e)
+        {
+            PortfolioLog.error("❌ Failed to initialize quote feeds: " + e.getMessage());
+            PortfolioLog.error(e);
+        }
+        
+        PortfolioLog.info("========================================");
     }
     
     /**

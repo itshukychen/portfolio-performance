@@ -2,9 +2,11 @@ package name.abuchen.portfolio.ui.api.controller;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import javax.ws.rs.Consumes;
@@ -17,14 +19,18 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import org.eclipse.core.runtime.jobs.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
+import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
 import name.abuchen.portfolio.ui.api.service.WidgetDataService;
+import name.abuchen.portfolio.ui.jobs.UpdateQuotesJob;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Dashboard;
+import name.abuchen.portfolio.model.Security;
 
 /**
  * REST Controller for portfolio operations.
@@ -273,6 +279,76 @@ public class PortfolioController {
         }
     }
     
+    /**
+     * Update prices for all active (non-retired) securities in the portfolio.
+     * 
+     * This endpoint triggers a price update job that fetches both latest and historic quotes
+     * for all securities in the portfolio that are not marked as retired.
+     * 
+     * @param portfolioId The portfolio ID
+     * @return Response indicating the price update job was scheduled
+     */
+    @POST
+    @Path("/{portfolioId}/updatePrices")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response updatePrices(@PathParam("portfolioId") String portfolioId) {
+        try {
+            logger.info("Updating prices for portfolio: " + portfolioId);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: " + portfolioId);
+                return createErrorResponse(Response.Status.NOT_FOUND, 
+                    "Portfolio not loaded", 
+                    "Portfolio must be opened first before updating prices");
+            }
+            
+            // Initialize API keys from preferences before running the update job
+            // This is necessary because the E4 dependency injection (Preference2EnvAddon)
+            // may not have been triggered in the REST API context
+            logger.info("Initializing API keys from preferences");
+            QuoteFeedApiKeyService.initializeApiKeys();
+            
+            // Create predicate to filter only active (non-retired) securities
+            Predicate<Security> onlyActive = s -> !s.isRetired();
+            
+            // Create and schedule the update quotes job with both LATEST and HISTORIC targets
+            Job updateJob = new UpdateQuotesJob(client, onlyActive,
+                            EnumSet.of(UpdateQuotesJob.Target.LATEST, UpdateQuotesJob.Target.HISTORIC));
+            updateJob.schedule();
+            
+            logger.info("Waiting for price update job to complete...");
+            
+            // Wait for the job to complete
+            updateJob.join();
+            
+            logger.info("Price update job completed. Saving portfolio file...");
+            
+            // Save the portfolio file after the update
+            portfolioFileService.saveFile(portfolioId);
+            
+            logger.info("Portfolio file saved successfully");
+            
+            // Get the updated portfolio info with full client data from cache
+            PortfolioFileInfo fileInfo = portfolioFileService.getFullPortfolioInfo(portfolioId);
+            
+            return Response.ok(fileInfo).build();
+            
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Price update job was interrupted for portfolio " + portfolioId + ": " + e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Price update interrupted", 
+                e.getMessage());
+        } catch (Exception e) {
+            logger.error("Unexpected error updating prices for portfolio " + portfolioId + ": " + e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
+    }
     
     
 }

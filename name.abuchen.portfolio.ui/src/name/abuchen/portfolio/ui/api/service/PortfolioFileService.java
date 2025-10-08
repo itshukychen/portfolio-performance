@@ -616,6 +616,66 @@ public class PortfolioFileService {
     }
     
     /**
+     * Save a portfolio file by its ID.
+     * 
+     * @param portfolioId The portfolio ID (file ID) to save
+     * @throws IOException if the file cannot be saved
+     * @throws FileNotFoundException if the portfolio file is not found
+     * @throws IllegalStateException if the portfolio is not loaded in cache
+     */
+    public void saveFile(String portfolioId) throws IOException {
+        logger.info("Saving portfolio file with ID: {}", portfolioId);
+        
+        // Get the cached client
+        Client client = getPortfolio(portfolioId);
+        if (client == null) {
+            throw new IllegalStateException("Portfolio not loaded in cache: " + portfolioId);
+        }
+        
+        // Find the file path
+        String relativePath = findFileById(portfolioId);
+        File file = portfolioDirectory.resolve(relativePath).toFile();
+        
+        // Save using ClientFactory
+        ClientFactory.save(client, file);
+        
+        logger.info("Portfolio file saved successfully: {}", file.getAbsolutePath());
+    }
+    
+    /**
+     * Get full portfolio information from cache, including all client data.
+     * This is similar to openFile but uses the cached client instead of reloading.
+     * 
+     * @param portfolioId The portfolio ID (file ID)
+     * @return PortfolioFileInfo with complete client data
+     * @throws IOException if the portfolio file cannot be found
+     * @throws IllegalStateException if the portfolio is not loaded in cache
+     */
+    public PortfolioFileInfo getFullPortfolioInfo(String portfolioId) throws IOException {
+        logger.info("Getting full portfolio info from cache for ID: {}", portfolioId);
+        
+        // Get the cached client
+        Client client = getPortfolio(portfolioId);
+        if (client == null) {
+            throw new IllegalStateException("Portfolio not loaded in cache: " + portfolioId);
+        }
+        
+        // Find the file path
+        String relativePath = findFileById(portfolioId);
+        File file = portfolioDirectory.resolve(relativePath).toFile();
+        
+        // Create basic file info
+        PortfolioFileInfo fileInfo = createBasicFileInfo(file, relativePath, portfolioId);
+        
+        // Populate with client data (same as openFile does)
+        populateClientData(fileInfo, client, file);
+        
+        logger.info("Full portfolio info retrieved from cache for ID: {}", portfolioId);
+        
+        return fileInfo;
+    }
+    
+    /**
      * Clear the client cache.
      */
     public void clearCache() {

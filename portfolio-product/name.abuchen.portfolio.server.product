@@ -52,9 +52,12 @@
       <plugin id="slf4j.simple" autoStart="true" startLevel="1" />
       <plugin id="org.eclipse.equinox.common" autoStart="true" startLevel="2" />
       <plugin id="org.apache.felix.scr" autoStart="true" startLevel="2" />
-      <plugin id="org.eclipse.core.runtime" autoStart="true" startLevel="4" />
       <plugin id="org.apache.aries.spifly.dynamic.bundle" autoStart="true" startLevel="2" />
+      <plugin id="name.abuchen.portfolio" autoStart="false" startLevel="3" />
+      <plugin id="name.abuchen.portfolio.ui" autoStart="false" startLevel="4" />
+      <plugin id="org.eclipse.core.runtime" autoStart="true" startLevel="4" />
       <plugin id="com.twelvemonkeys.imageio.bmp" autoStart="true" startLevel="4" />
+      <plugin id="name.abuchen.portfolio.server" autoStart="true" startLevel="5" />
       <property name="osgi.instance.area.default" value="$LOCALAPPDATA$/PortfolioPerformanceServer/workspace" os="win32" />
       <property name="osgi.instance.area.default" value="@user.home/Library/Application Support/name.abuchen.portfolio.server/workspace" os="macosx" />
       <property name="osgi.instance.area.default" value="@user.home/.PortfolioPerformanceServer/workspace" os="linux" />
