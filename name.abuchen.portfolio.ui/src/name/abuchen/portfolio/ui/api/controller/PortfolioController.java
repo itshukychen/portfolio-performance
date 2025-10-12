@@ -44,7 +44,7 @@ public class PortfolioController {
     private static final Logger logger = LoggerFactory.getLogger(PortfolioController.class);
     
     // Use static singleton to ensure cache is shared across all API calls
-    private static final PortfolioFileService portfolioFileService = new PortfolioFileService();
+    private static final PortfolioFileService portfolioFileService = PortfolioFileService.getInstance();
     private static final WidgetDataService widgetDataService = new WidgetDataService();
     
     /**

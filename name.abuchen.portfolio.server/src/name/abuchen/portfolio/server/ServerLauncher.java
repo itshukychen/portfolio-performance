@@ -19,6 +19,8 @@ import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.ExchangeRateTimeSeries;
 import name.abuchen.portfolio.money.impl.ECBExchangeRateProvider;
 import name.abuchen.portfolio.ui.api.PortfolioApiServer;
+import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
+import name.abuchen.portfolio.ui.api.service.ScheduledPriceUpdateService;
 
 /**
  * Server launcher that starts the HTTP server from the UI project without
@@ -34,6 +36,7 @@ public class ServerLauncher implements IApplication
     private static final String PORT_PROPERTY = "portfolio.server.port";
     
     private PortfolioApiServer apiServer;
+    private ScheduledPriceUpdateService scheduledPriceUpdateService;
     private volatile boolean running = true;
 
     @Override
@@ -66,6 +69,10 @@ public class ServerLauncher implements IApplication
                 apiServer = new PortfolioApiServer();
                 apiServer.start(port);
                 PortfolioLog.info("✅ Server started successfully on port " + port);
+                
+                // Start the scheduled price update service
+                startScheduledPriceUpdateService();
+                
                 PortfolioLog.info("📋 Press Ctrl+C to stop the server");
             }
             catch (Exception e)
@@ -102,6 +109,12 @@ public class ServerLauncher implements IApplication
     {
         PortfolioLog.info("🛑 Stopping Portfolio Performance Server...");
         running = false;
+        
+        // Stop the scheduled price update service
+        if (scheduledPriceUpdateService != null)
+        {
+            scheduledPriceUpdateService.stop();
+        }
         
         // Save exchange rates before shutdown
         saveExchangeRates();
@@ -304,6 +317,36 @@ public class ServerLauncher implements IApplication
         catch (Exception e)
         {
             PortfolioLog.error("Error checking ECB storage location: " + e.getMessage());
+            PortfolioLog.error(e);
+        }
+    }
+    
+    /**
+     * Start the scheduled price update service.
+     * This service will automatically update prices for all loaded portfolios every 10 minutes.
+     */
+    private void startScheduledPriceUpdateService()
+    {
+        try
+        {
+            PortfolioLog.info("========================================");
+            PortfolioLog.info("Starting scheduled price update service...");
+            PortfolioLog.info("========================================");
+            
+            // Get the singleton PortfolioFileService instance
+            // This ensures the scheduled service uses the same cache as the PortfolioController
+            PortfolioFileService portfolioFileService = PortfolioFileService.getInstance();
+            
+            scheduledPriceUpdateService = new ScheduledPriceUpdateService(portfolioFileService);
+            scheduledPriceUpdateService.start();
+            
+            PortfolioLog.info("✅ Scheduled price update service started");
+            PortfolioLog.info("   Prices will be updated every 10 minutes for all loaded portfolios");
+            PortfolioLog.info("========================================");
+        }
+        catch (Exception e)
+        {
+            PortfolioLog.error("❌ Failed to start scheduled price update service: " + e.getMessage());
             PortfolioLog.error(e);
         }
     }

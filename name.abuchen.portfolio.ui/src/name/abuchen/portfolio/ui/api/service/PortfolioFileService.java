@@ -13,8 +13,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -44,11 +46,26 @@ public class PortfolioFileService {
     
     private static final Logger logger = LoggerFactory.getLogger(PortfolioFileService.class);
     
+    // Singleton instance
+    private static PortfolioFileService instance;
+    
     // Portfolio directory configuration
     private final Path portfolioDirectory;
     
     // Cache for loaded clients to avoid reloading the same file
     private final Map<String, Client> clientCache = new ConcurrentHashMap<>();
+    
+    /**
+     * Get the singleton instance of PortfolioFileService.
+     * 
+     * @return The singleton instance
+     */
+    public static synchronized PortfolioFileService getInstance() {
+        if (instance == null) {
+            instance = new PortfolioFileService();
+        }
+        return instance;
+    }
     
     /**
      * Constructor that initializes the portfolio directory from environment variable or system property.
@@ -685,6 +702,16 @@ public class PortfolioFileService {
     
     
     /**
+     * Get the IDs of all portfolios currently cached.
+     * 
+     * @return Set of portfolio IDs (file IDs) that are currently in the cache
+     */
+    public Set<String> getCachedPortfolioIds() {
+        // Return a copy to prevent external modification of internal cache structure
+        return new HashSet<>(clientCache.keySet());
+    }
+    
+    /**
      * Get cache statistics.
      * 
      * @return Map containing cache statistics
@@ -692,7 +719,7 @@ public class PortfolioFileService {
     public Map<String, Object> getCacheStats() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("cachedClients", clientCache.size());
-        stats.put("cacheKeys", clientCache.keySet());
+        // Don't expose internal cache keys - use getCachedPortfolioIds() instead
         return stats;
     }
     
