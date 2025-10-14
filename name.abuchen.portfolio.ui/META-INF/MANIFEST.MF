@@ -158,4 +158,5 @@ Service-Component: OSGI-INF/name.abuchen.portfolio.ui.util.theme.ColorAndFontPro
  OSGI-INF/name.abuchen.portfolio.ui.theme.CustomThemeEngineManager.xml
 Export-Package: name.abuchen.portfolio.ui,
  name.abuchen.portfolio.ui.api,
+ name.abuchen.portfolio.ui.api.service,
  name.abuchen.portfolio.ui.util

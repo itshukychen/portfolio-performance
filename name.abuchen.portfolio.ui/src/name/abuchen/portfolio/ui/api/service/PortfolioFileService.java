@@ -190,7 +190,7 @@ public class PortfolioFileService {
             logger.info("Loading portfolio file: {} with ClientFactory", file.getAbsolutePath());
             
             MinimalProgressMonitor monitor = new MinimalProgressMonitor();
-            client = ClientFactory.load(file, password, monitor);
+            Client client = ClientFactory.load(file, password, monitor);
             
             clientCache.put(fileId, client);
             logger.info("Successfully loaded portfolio file: {}", relativePath);
