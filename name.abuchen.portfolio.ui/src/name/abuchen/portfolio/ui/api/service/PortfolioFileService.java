@@ -186,13 +186,6 @@ public class PortfolioFileService {
      * @throws IOException if loading fails
      */
     private Client loadClient(File file, String fileId, String relativePath, char[] password) throws IOException {
-        Client client = clientCache.get(fileId);
-        
-        if (client != null) {
-            logger.info("Using cached client for: {}", relativePath);
-            return client;
-        }
-        
         try {
             logger.info("Loading portfolio file: {} with ClientFactory", file.getAbsolutePath());
             
