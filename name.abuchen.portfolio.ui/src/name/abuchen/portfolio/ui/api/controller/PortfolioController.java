@@ -64,6 +64,22 @@ public class PortfolioController {
     }
     
     /**
+     * Helper method to create 428 Precondition Required responses.
+     * Used when a portfolio must be opened first before accessing a resource.
+     * 
+     * @param error Error type/category
+     * @param message Detailed error message
+     * @return Response with 428 status and error details
+     */
+    private Response createPreconditionRequiredResponse(String error, String message) {
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("error", error);
+        errorResponse.put("message", message);
+        return Response.status(428).entity(errorResponse).build();
+    }
+    
+    /**
      * List all portfolios in the portfolio directory.
      * 
      * @return List of portfolios
@@ -81,11 +97,9 @@ public class PortfolioController {
             
         } catch (IOException e) {
             logger.error("Failed to list portfolios", e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Failed to list portfolios");
-            errorResponse.put("message", e.getMessage());
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(errorResponse).build();
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "INTERNAL_ERROR", 
+                "Failed to list portfolios: " + e.getMessage());
         }
     }
     
@@ -145,27 +159,21 @@ public class PortfolioController {
             
         } catch (FileNotFoundException e) {
             logger.error("Portfolio not found: " + portfolioId + " - " + e.getMessage());
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Portfolio not found");
-            errorResponse.put("message", e.getMessage());
-            return Response.status(Response.Status.NOT_FOUND).entity(errorResponse).build();
+            return createErrorResponse(Response.Status.NOT_FOUND, 
+                "PORTFOLIO_NOT_FOUND", 
+                e.getMessage());
                 
         } catch (IOException e) {
             logger.error("Failed to get portfolio info: " + portfolioId + " - " + e.getMessage());
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Failed to get portfolio info");
-            errorResponse.put("message", e.getMessage());
-            return Response.status(Response.Status.BAD_REQUEST).entity(errorResponse).build();
+            return createErrorResponse(Response.Status.BAD_REQUEST, 
+                "INVALID_REQUEST", 
+                e.getMessage());
                 
         } catch (Exception e) {
             logger.error("Unexpected error getting portfolio info: " + portfolioId + " - " + e.getMessage());
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Internal server error");
-            errorResponse.put("message", e.getMessage());
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(errorResponse).build();
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "INTERNAL_ERROR", 
+                e.getMessage());
         }
     }
     
@@ -218,8 +226,8 @@ public class PortfolioController {
             
             if (client == null) {
                 logger.warn("No cached client found for portfolio: " + portfolioId);
-                return createErrorResponse(Response.Status.NOT_FOUND, 
-                    "Portfolio not loaded", 
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
                     "Portfolio must be opened first before accessing widgets");
             }
             
@@ -300,8 +308,8 @@ public class PortfolioController {
             
             if (client == null) {
                 logger.warn("No cached client found for portfolio: " + portfolioId);
-                return createErrorResponse(Response.Status.NOT_FOUND, 
-                    "Portfolio not loaded", 
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
                     "Portfolio must be opened first before updating prices");
             }
             
