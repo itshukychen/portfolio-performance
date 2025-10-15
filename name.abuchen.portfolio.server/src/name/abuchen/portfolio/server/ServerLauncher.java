@@ -16,10 +16,10 @@ import org.osgi.framework.FrameworkUtil;
 import name.abuchen.portfolio.PortfolioLog;
 import name.abuchen.portfolio.money.ExchangeRateProvider;
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
-import name.abuchen.portfolio.money.ExchangeRateTimeSeries;
 import name.abuchen.portfolio.money.impl.ECBExchangeRateProvider;
 import name.abuchen.portfolio.ui.api.PortfolioApiServer;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
+import name.abuchen.portfolio.ui.api.service.ScheduledExchangeRateUpdateService;
 import name.abuchen.portfolio.ui.api.service.ScheduledPriceUpdateService;
 
 /**
@@ -37,6 +37,7 @@ public class ServerLauncher implements IApplication
     
     private PortfolioApiServer apiServer;
     private ScheduledPriceUpdateService scheduledPriceUpdateService;
+    private ScheduledExchangeRateUpdateService scheduledExchangeRateUpdateService;
     private volatile boolean running = true;
 
     @Override
@@ -72,6 +73,9 @@ public class ServerLauncher implements IApplication
                 
                 // Start the scheduled price update service
                 startScheduledPriceUpdateService();
+                
+                // Start the scheduled exchange rate update service
+                startScheduledExchangeRateUpdateService();
                 
                 PortfolioLog.info("📋 Press Ctrl+C to stop the server");
             }
@@ -114,6 +118,12 @@ public class ServerLauncher implements IApplication
         if (scheduledPriceUpdateService != null)
         {
             scheduledPriceUpdateService.stop();
+        }
+        
+        // Stop the scheduled exchange rate update service
+        if (scheduledExchangeRateUpdateService != null)
+        {
+            scheduledExchangeRateUpdateService.stop();
         }
         
         // Save exchange rates before shutdown
@@ -213,7 +223,7 @@ public class ServerLauncher implements IApplication
     
     /**
      * Initialize exchange rate providers by loading their cached data from files.
-     * This replicates what StartupAddon.updateExchangeRates() does in UI mode.
+     * Online updates are handled by the scheduled exchange rate update service.
      */
     private void initializeExchangeRates()
     {
@@ -242,26 +252,6 @@ public class ServerLauncher implements IApplication
                 PortfolioLog.info("📥 Loading exchange rates for: " + provider.getName());
                 provider.load(monitor);
                 PortfolioLog.info("   ✅ Loaded successfully: " + provider.getName());
-                
-                // Try to update from online if load was successful
-                if (provider instanceof ECBExchangeRateProvider)
-                {
-                    PortfolioLog.info("   🌐 Attempting to update from ECB online...");
-                    try
-                    {
-                        provider.update(monitor);
-                        PortfolioLog.info("   ✅ Updated from ECB online successfully");
-                        
-                        // Save the updated data to cache file
-                        PortfolioLog.info("   💾 Saving updated rates to cache...");
-                        provider.save(monitor);
-                        PortfolioLog.info("   ✅ Saved to cache file");
-                    }
-                    catch (IOException e)
-                    {
-                        PortfolioLog.error("   ⚠️  Could not update from online (using cached/default data): " + e.getMessage());
-                    }
-                }
             }
             catch (Exception e)
             {
@@ -273,6 +263,7 @@ public class ServerLauncher implements IApplication
         
         PortfolioLog.info("========================================");
         PortfolioLog.info("Exchange rate initialization complete");
+        PortfolioLog.info("   Online updates will be handled by the scheduled update service");
         PortfolioLog.info("========================================");
     }
     
@@ -347,6 +338,32 @@ public class ServerLauncher implements IApplication
         catch (Exception e)
         {
             PortfolioLog.error("❌ Failed to start scheduled price update service: " + e.getMessage());
+            PortfolioLog.error(e);
+        }
+    }
+    
+    /**
+     * Start the scheduled exchange rate update service.
+     * This service will automatically update exchange rates every 10 minutes.
+     */
+    private void startScheduledExchangeRateUpdateService()
+    {
+        try
+        {
+            PortfolioLog.info("========================================");
+            PortfolioLog.info("Starting scheduled exchange rate update service...");
+            PortfolioLog.info("========================================");
+            
+            scheduledExchangeRateUpdateService = new ScheduledExchangeRateUpdateService();
+            scheduledExchangeRateUpdateService.start();
+            
+            PortfolioLog.info("✅ Scheduled exchange rate update service started");
+            PortfolioLog.info("   Exchange rates will be updated every 10 minutes");
+            PortfolioLog.info("========================================");
+        }
+        catch (Exception e)
+        {
+            PortfolioLog.error("❌ Failed to start scheduled exchange rate update service: " + e.getMessage());
             PortfolioLog.error(e);
         }
     }
