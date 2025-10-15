@@ -24,6 +24,7 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import name.abuchen.portfolio.ui.api.dto.EarningsTransactionDto;
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.dto.SecurityPriceDto;
 import name.abuchen.portfolio.ui.api.dto.ValueDataPointDto;
@@ -32,6 +33,7 @@ import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
 import name.abuchen.portfolio.ui.api.service.WidgetDataService;
 import name.abuchen.portfolio.ui.jobs.priceupdate.UpdatePricesJob;
 import name.abuchen.portfolio.model.Account;
+import name.abuchen.portfolio.model.AccountTransaction;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Dashboard;
 import name.abuchen.portfolio.model.Portfolio;
@@ -649,6 +651,173 @@ public class PortfolioController {
         } catch (Exception e) {
             logger.error("Unexpected error getting values for portfolio {} in client {}: {}", 
                 securityAccountUuid, portfolioId, e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
+    }
+    
+    /**
+     * Get earnings transactions for a given period.
+     * 
+     * This endpoint returns all earnings transactions (dividends, interest, interest charges)
+     * within a specified date range.
+     * 
+     * @param portfolioId The portfolio ID (file)
+     * @param startDate Start date for filtering transactions (optional, defaults to 1 year ago)
+     * @param endDate End date for filtering transactions (optional, defaults to today)
+     * @param type Filter by transaction type: DIVIDENDS, INTEREST, INTEREST_CHARGE, or ALL (optional, defaults to ALL)
+     * @return Response containing the list of earnings transactions
+     */
+    @GET
+    @Path("/{portfolioId}/earnings")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getEarnings(@PathParam("portfolioId") String portfolioId,
+                               @QueryParam("startDate") String startDate,
+                               @QueryParam("endDate") String endDate,
+                               @QueryParam("type") String type) {
+        try {
+            logger.info("Getting earnings for portfolio {} from {} to {} (type: {})", 
+                portfolioId, startDate, endDate, type);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: " + portfolioId);
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
+                    "Portfolio must be opened first before accessing earnings");
+            }
+            
+            // Parse dates with defaults
+            LocalDate start = startDate != null && !startDate.isEmpty() 
+                ? LocalDate.parse(startDate) 
+                : LocalDate.now().minusYears(1);
+            LocalDate end = endDate != null && !endDate.isEmpty() 
+                ? LocalDate.parse(endDate) 
+                : LocalDate.now();
+            
+            // Validate date range
+            if (start.isAfter(end)) {
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Invalid date range", 
+                    "Start date must be before or equal to end date");
+            }
+            
+            // Determine which transaction types to include
+            Predicate<AccountTransaction.Type> typeFilter;
+            String filterType = type != null && !type.isEmpty() ? type.toUpperCase() : "ALL";
+            
+            switch (filterType) {
+                case "DIVIDENDS":
+                    typeFilter = t -> t == AccountTransaction.Type.DIVIDENDS;
+                    break;
+                case "INTEREST":
+                    typeFilter = t -> t == AccountTransaction.Type.INTEREST 
+                                   || t == AccountTransaction.Type.INTEREST_CHARGE;
+                    break;
+                case "INTEREST_CHARGE":
+                    typeFilter = t -> t == AccountTransaction.Type.INTEREST_CHARGE;
+                    break;
+                case "ALL":
+                default:
+                    typeFilter = t -> t == AccountTransaction.Type.DIVIDENDS 
+                                   || t == AccountTransaction.Type.INTEREST 
+                                   || t == AccountTransaction.Type.INTEREST_CHARGE;
+                    break;
+            }
+            
+            // Collect all earnings transactions from all accounts
+            List<EarningsTransactionDto> earnings = new ArrayList<>();
+            
+            for (Account account : client.getAccounts()) {
+                for (AccountTransaction tx : account.getTransactions()) {
+                    // Filter by type
+                    if (!typeFilter.test(tx.getType())) {
+                        continue;
+                    }
+                    
+                    // Filter by date range
+                    LocalDate txDate = tx.getDateTime().toLocalDate();
+                    if (txDate.isBefore(start) || txDate.isAfter(end)) {
+                        continue;
+                    }
+                    
+                    // Create DTO
+                    EarningsTransactionDto dto = new EarningsTransactionDto();
+                    dto.setUuid(tx.getUUID());
+                    dto.setDateTime(tx.getDateTime());
+                    dto.setType(tx.getType().name());
+                    dto.setCurrencyCode(tx.getCurrencyCode());
+                    dto.setAmount(tx.getAmount() / Values.Amount.divider());
+                    dto.setGrossValue(tx.getGrossValueAmount() / Values.Amount.divider());
+                    
+                    // Calculate taxes and fees
+                    double taxes = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.TAX)
+                        .getAmount() / Values.Amount.divider();
+                    double fees = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.FEE)
+                        .getAmount() / Values.Amount.divider();
+                    
+                    dto.setTaxes(taxes);
+                    dto.setFees(fees);
+                    
+                    // Add security information if available
+                    if (tx.getSecurity() != null) {
+                        dto.setSecurityUuid(tx.getSecurity().getUUID());
+                        dto.setSecurityName(tx.getSecurity().getName());
+                        dto.setSecurityIsin(tx.getSecurity().getIsin());
+                    }
+                    
+                    // Add account information
+                    dto.setAccountUuid(account.getUUID());
+                    dto.setAccountName(account.getName());
+                    dto.setNote(tx.getNote());
+                    dto.setSource(tx.getSource());
+                    
+                    earnings.add(dto);
+                }
+            }
+            
+            // Sort by date (most recent first)
+            earnings.sort((a, b) -> b.getDateTime().compareTo(a.getDateTime()));
+            
+            // Calculate totals
+            double totalAmount = earnings.stream()
+                .mapToDouble(EarningsTransactionDto::getAmount)
+                .sum();
+            double totalGrossValue = earnings.stream()
+                .mapToDouble(EarningsTransactionDto::getGrossValue)
+                .sum();
+            double totalTaxes = earnings.stream()
+                .mapToDouble(EarningsTransactionDto::getTaxes)
+                .sum();
+            double totalFees = earnings.stream()
+                .mapToDouble(EarningsTransactionDto::getFees)
+                .sum();
+            
+            // Create response
+            Map<String, Object> response = new HashMap<>();
+            response.put("portfolioId", portfolioId);
+            response.put("startDate", start);
+            response.put("endDate", end);
+            response.put("filterType", filterType);
+            response.put("count", earnings.size());
+            response.put("totalAmount", totalAmount);
+            response.put("totalGrossValue", totalGrossValue);
+            response.put("totalTaxes", totalTaxes);
+            response.put("totalFees", totalFees);
+            response.put("baseCurrency", client.getBaseCurrency());
+            response.put("earnings", earnings);
+            
+            logger.info("Returning {} earnings transactions for portfolio {} (total: {}, gross: {})", 
+                earnings.size(), portfolioId, totalAmount, totalGrossValue);
+            
+            return Response.ok(response).build();
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error getting earnings for portfolio {}: {}", 
+                portfolioId, e.getMessage(), e);
             return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
                 "Internal server error", 
                 e.getMessage());
