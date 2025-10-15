@@ -2,6 +2,7 @@ package name.abuchen.portfolio.ui.api.controller;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -25,15 +26,26 @@ import org.slf4j.LoggerFactory;
 
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.dto.SecurityPriceDto;
+import name.abuchen.portfolio.ui.api.dto.ValueDataPointDto;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
 import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
 import name.abuchen.portfolio.ui.api.service.WidgetDataService;
 import name.abuchen.portfolio.ui.jobs.priceupdate.UpdatePricesJob;
+import name.abuchen.portfolio.model.Account;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Dashboard;
+import name.abuchen.portfolio.model.Portfolio;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityPrice;
+import name.abuchen.portfolio.money.CurrencyConverter;
+import name.abuchen.portfolio.money.CurrencyConverterImpl;
+import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
+import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.Values;
+import name.abuchen.portfolio.snapshot.AccountSnapshot;
+import name.abuchen.portfolio.snapshot.PortfolioSnapshot;
+
+import java.time.LocalDate;
 
 /**
  * REST Controller for portfolio operations.
@@ -429,6 +441,214 @@ public class PortfolioController {
         } catch (Exception e) {
             logger.error("Unexpected error getting prices for security {} in portfolio {}: {}", 
                 securityUuid, portfolioId, e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
+    }
+    
+    /**
+     * Get account value over time.
+     * 
+     * This endpoint returns the account balance over a specified date range.
+     * The values are calculated based on account transactions up to each date.
+     * 
+     * @param portfolioId The portfolio ID
+     * @param accountUuid The account UUID
+     * @param startDate Start date for the time series (optional, defaults to 1 year ago)
+     * @param endDate End date for the time series (optional, defaults to today)
+     * @return Response containing the account's values over time
+     */
+    @GET
+    @Path("/{portfolioId}/accounts/{accountUuid}/values")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getAccountValues(@PathParam("portfolioId") String portfolioId,
+                                     @PathParam("accountUuid") String accountUuid,
+                                     @QueryParam("startDate") String startDate,
+                                     @QueryParam("endDate") String endDate) {
+        try {
+            logger.info("Getting values for account {} in portfolio {}", accountUuid, portfolioId);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: " + portfolioId);
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
+                    "Portfolio must be opened first before accessing account values");
+            }
+            
+            // Find the account by UUID
+            Account account = client.getAccounts().stream()
+                .filter(a -> accountUuid.equals(a.getUUID()))
+                .findFirst()
+                .orElse(null);
+            
+            if (account == null) {
+                logger.warn("Account not found: {} in portfolio: {}", accountUuid, portfolioId);
+                return createErrorResponse(Response.Status.NOT_FOUND, 
+                    "Account not found", 
+                    "Account with UUID " + accountUuid + " not found in portfolio");
+            }
+            
+            // Parse dates with defaults
+            LocalDate start = startDate != null && !startDate.isEmpty() 
+                ? LocalDate.parse(startDate) 
+                : LocalDate.now().minusYears(1);
+            LocalDate end = endDate != null && !endDate.isEmpty() 
+                ? LocalDate.parse(endDate) 
+                : LocalDate.now();
+            
+            // Validate date range
+            if (start.isAfter(end)) {
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Invalid date range", 
+                    "Start date must be before or equal to end date");
+            }
+            
+            // Create currency converter
+            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+            CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+            
+            // Calculate values for each date in range
+            List<ValueDataPointDto> valuePoints = new ArrayList<>();
+            LocalDate currentDate = start;
+            
+            while (!currentDate.isAfter(end)) {
+                AccountSnapshot snapshot = AccountSnapshot.create(account, converter, currentDate);
+                Money funds = snapshot.getFunds();
+                
+                // Convert to double value
+                double value = funds.getAmount() / Values.Amount.divider();
+                
+                valuePoints.add(new ValueDataPointDto(currentDate, value));
+                currentDate = currentDate.plusDays(1);
+            }
+            
+            // Create response
+            Map<String, Object> response = new HashMap<>();
+            response.put("portfolioId", portfolioId);
+            response.put("accountUuid", accountUuid);
+            response.put("accountName", account.getName());
+            response.put("currencyCode", account.getCurrencyCode());
+            response.put("startDate", start);
+            response.put("endDate", end);
+            response.put("dataPointsCount", valuePoints.size());
+            response.put("values", valuePoints);
+            
+            logger.info("Returning {} value data points for account {} ({})", 
+                valuePoints.size(), account.getName(), accountUuid);
+            
+            return Response.ok(response).build();
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error getting values for account {} in portfolio {}: {}", 
+                accountUuid, portfolioId, e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
+    }
+    
+    /**
+     * Get portfolio value over time.
+     * 
+     * This endpoint returns the portfolio's market value over a specified date range.
+     * The values are calculated based on holdings and security prices at each date.
+     * 
+     * @param portfolioId The portfolio ID (file)
+     * @param securityAccountUuid The security account (portfolio) UUID
+     * @param startDate Start date for the time series (optional, defaults to 1 year ago)
+     * @param endDate End date for the time series (optional, defaults to today)
+     * @return Response containing the portfolio's values over time
+     */
+    @GET
+    @Path("/{portfolioId}/securityaccounts/{securityAccountUuid}/values")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getPortfolioValues(@PathParam("portfolioId") String portfolioId,
+                                      @PathParam("securityAccountUuid") String securityAccountUuid,
+                                      @QueryParam("startDate") String startDate,
+                                      @QueryParam("endDate") String endDate) {
+        try {
+            logger.info("Getting values for security account {} in portfolio {}", securityAccountUuid, portfolioId);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: " + portfolioId);
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
+                    "Portfolio must be opened first before accessing portfolio values");
+            }
+            
+            // Find the portfolio by UUID
+            Portfolio portfolio = client.getPortfolios().stream()
+                .filter(p -> securityAccountUuid.equals(p.getUUID()))
+                .findFirst()
+                .orElse(null);
+            
+            if (portfolio == null) {
+                logger.warn("Portfolio not found: {} in client: {}", securityAccountUuid, portfolioId);
+                return createErrorResponse(Response.Status.NOT_FOUND, 
+                    "Portfolio not found", 
+                    "Portfolio with UUID " + securityAccountUuid + " not found");
+            }
+            
+            // Parse dates with defaults
+            LocalDate start = startDate != null && !startDate.isEmpty() 
+                ? LocalDate.parse(startDate) 
+                : LocalDate.now().minusYears(1);
+            LocalDate end = endDate != null && !endDate.isEmpty() 
+                ? LocalDate.parse(endDate) 
+                : LocalDate.now();
+            
+            // Validate date range
+            if (start.isAfter(end)) {
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Invalid date range", 
+                    "Start date must be before or equal to end date");
+            }
+            
+            // Create currency converter
+            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+            CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+            
+            // Calculate values for each date in range
+            List<ValueDataPointDto> valuePoints = new ArrayList<>();
+            LocalDate currentDate = start;
+            
+            while (!currentDate.isAfter(end)) {
+                PortfolioSnapshot snapshot = PortfolioSnapshot.create(portfolio, converter, currentDate);
+                Money marketValue = snapshot.getValue();
+                
+                // Convert to double value
+                double value = marketValue.getAmount() / Values.Amount.divider();
+                
+                valuePoints.add(new ValueDataPointDto(currentDate, value));
+                currentDate = currentDate.plusDays(1);
+            }
+            
+            // Create response
+            Map<String, Object> response = new HashMap<>();
+            response.put("portfolioId", portfolioId);
+            response.put("securityAccountUuid", securityAccountUuid);
+            response.put("securityAccountName", portfolio.getName());
+            response.put("baseCurrency", client.getBaseCurrency());
+            response.put("startDate", start);
+            response.put("endDate", end);
+            response.put("dataPointsCount", valuePoints.size());
+            response.put("values", valuePoints);
+            
+            logger.info("Returning {} value data points for portfolio {} ({})", 
+                valuePoints.size(), portfolio.getName(), securityAccountUuid);
+            
+            return Response.ok(response).build();
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error getting values for portfolio {} in client {}: {}", 
+                securityAccountUuid, portfolioId, e.getMessage(), e);
             return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
                 "Internal server error", 
                 e.getMessage());
