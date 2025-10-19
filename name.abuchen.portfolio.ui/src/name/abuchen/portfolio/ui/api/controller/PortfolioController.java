@@ -38,6 +38,7 @@ import name.abuchen.portfolio.model.AccountTransaction;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Dashboard;
 import name.abuchen.portfolio.model.Portfolio;
+import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.money.CurrencyConverter;
@@ -855,6 +856,253 @@ public class PortfolioController {
             
         } catch (Exception e) {
             logger.error("Unexpected error getting earnings for portfolio {}: {}", 
+                portfolioId, e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
+    }
+    
+    /**
+     * Get options earnings for a given period.
+     * 
+     * This endpoint returns all options-related transactions (security sells with options ticker patterns
+     * and option-related fees) within a specified date range.
+     * 
+     * Options are identified by ticker symbols matching the pattern: .*\d{6}[CP]\d{8}
+     * (e.g., 6 digits for date, C/P for Call/Put, 8 digits for strike price)
+     * 
+     * Additionally, fee transactions with the comment "EXPOSURE FEE" are included as options-related fees.
+     * 
+     * @param portfolioId The portfolio ID (file)
+     * @param startDate Start date for filtering transactions (optional, defaults to 1 year ago)
+     * @param endDate End date for filtering transactions (optional, defaults to today)
+     * @return Response containing the list of options earnings transactions
+     */
+    @GET
+    @Path("/{portfolioId}/optionsEarnings")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getOptionsEarnings(@PathParam("portfolioId") String portfolioId,
+                                      @QueryParam("startDate") String startDate,
+                                      @QueryParam("endDate") String endDate) {
+        try {
+            logger.info("Getting options earnings for portfolio {} from {} to {}", 
+                portfolioId, startDate, endDate);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: " + portfolioId);
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
+                    "Portfolio must be opened first before accessing options earnings");
+            }
+            
+            // Parse dates with defaults
+            LocalDate start = startDate != null && !startDate.isEmpty() 
+                ? LocalDate.parse(startDate) 
+                : LocalDate.now().minusYears(1);
+            LocalDate end = endDate != null && !endDate.isEmpty() 
+                ? LocalDate.parse(endDate) 
+                : LocalDate.now();
+            
+            // Validate date range
+            if (start.isAfter(end)) {
+                return createErrorResponse(Response.Status.BAD_REQUEST, 
+                    "Invalid date range", 
+                    "Start date must be before or equal to end date");
+            }
+            
+            // Create currency converter for base currency conversion
+            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+            CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+            
+            // Collect all options earnings transactions
+            List<EarningsTransactionDto> optionsEarnings = new ArrayList<>();
+            
+            // 1. Collect security SELL transactions with options ticker pattern
+            for (Portfolio portfolio : client.getPortfolios()) {
+                for (PortfolioTransaction tx : portfolio.getTransactions()) {
+                    // Filter by type - only SELL transactions
+                    if (tx.getType() != PortfolioTransaction.Type.SELL) {
+                        continue;
+                    }
+                    
+                    // Filter by date range
+                    LocalDate txDate = tx.getDateTime().toLocalDate();
+                    if (txDate.isBefore(start) || txDate.isAfter(end)) {
+                        continue;
+                    }
+                    
+                    // Check if security has options ticker pattern
+                    Security security = tx.getSecurity();
+                    if (security == null || security.getTickerSymbol() == null) {
+                        continue;
+                    }
+                    
+                    String ticker = security.getTickerSymbol().replaceAll("\\s+", "");
+                    if (!ticker.matches(".*\\d{6}[CP]\\d{8}")) {
+                        continue;
+                    }
+                    
+                    // This is an options transaction - create DTO
+                    EarningsTransactionDto dto = new EarningsTransactionDto();
+                    dto.setUuid(tx.getUUID());
+                    dto.setDateTime(tx.getDateTime());
+                    dto.setType("OPTIONS_SELL");
+                    dto.setCurrencyCode(tx.getCurrencyCode());
+                    
+                    // Original currency amounts
+                    // For SELL transactions, the amount is what we receive
+                    double amount = tx.getAmount() / Values.Amount.divider();
+                    
+                    Money taxesMoney = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.TAX);
+                    Money feesMoney = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.FEE);
+                    
+                    double taxes = taxesMoney.getAmount() / Values.Amount.divider();
+                    double fees = feesMoney.getAmount() / Values.Amount.divider();
+                    
+                    // Calculate gross value (amount + taxes + fees)
+                    double grossValue = amount + taxes + fees;
+                    
+                    dto.setAmount(amount);
+                    dto.setGrossValue(grossValue);
+                    dto.setTaxes(taxes);
+                    dto.setFees(fees);
+                    
+                    // Converted amounts in base currency
+                    dto.setBaseCurrency(client.getBaseCurrency());
+                    
+                    Money amountMoney = Money.of(tx.getCurrencyCode(), tx.getAmount()).with(converter.at(tx.getDateTime()));
+                    dto.setAmountInBaseCurrency(amountMoney.getAmount() / Values.Amount.divider());
+                    
+                    Money grossValueMoney = Money.of(tx.getCurrencyCode(), 
+                        (long)(grossValue * Values.Amount.divider())).with(converter.at(tx.getDateTime()));
+                    dto.setGrossValueInBaseCurrency(grossValueMoney.getAmount() / Values.Amount.divider());
+                    
+                    Money taxesConverted = taxesMoney.with(converter.at(tx.getDateTime()));
+                    dto.setTaxesInBaseCurrency(taxesConverted.getAmount() / Values.Amount.divider());
+                    
+                    Money feesConverted = feesMoney.with(converter.at(tx.getDateTime()));
+                    dto.setFeesInBaseCurrency(feesConverted.getAmount() / Values.Amount.divider());
+                    
+                    // Add security information
+                    dto.setSecurityUuid(security.getUUID());
+                    dto.setSecurityName(security.getName());
+                    dto.setSecurityIsin(security.getIsin());
+                    
+                    // Add portfolio information (note: portfolio.getAccount() may be null)
+                    if (portfolio.getReferenceAccount() != null) {
+                        dto.setAccountUuid(portfolio.getReferenceAccount().getUUID());
+                        dto.setAccountName(portfolio.getReferenceAccount().getName());
+                    }
+                    dto.setNote(tx.getNote());
+                    dto.setSource(tx.getSource());
+                    
+                    optionsEarnings.add(dto);
+                }
+            }
+            
+            // 2. Collect fee transactions with comment "EXPOSURE FEE"
+            for (Account account : client.getAccounts()) {
+                for (AccountTransaction tx : account.getTransactions()) {
+                    // Filter by type - only FEES transactions
+                    if (tx.getType() != AccountTransaction.Type.FEES) {
+                        continue;
+                    }
+                    
+                    // Filter by date range
+                    LocalDate txDate = tx.getDateTime().toLocalDate();
+                    if (txDate.isBefore(start) || txDate.isAfter(end)) {
+                        continue;
+                    }
+                    
+                    // Filter by note/comment "EXPOSURE FEE"
+                    if (tx.getNote() == null || !tx.getNote().contains("EXPOSURE FEE")) {
+                        continue;
+                    }
+                    
+                    // This is an options-related fee - create DTO
+                    EarningsTransactionDto dto = new EarningsTransactionDto();
+                    dto.setUuid(tx.getUUID());
+                    dto.setDateTime(tx.getDateTime());
+                    dto.setType("EXPOSURE_FEE");
+                    dto.setCurrencyCode(tx.getCurrencyCode());
+                    
+                    // For fee transactions, the amount is negative (debit)
+                    double amount = -(tx.getAmount() / Values.Amount.divider());
+                    
+                    dto.setAmount(amount);
+                    dto.setGrossValue(amount); // For fees, gross value equals amount
+                    dto.setTaxes(0.0);
+                    dto.setFees(Math.abs(amount)); // The fee itself
+                    
+                    // Converted amounts in base currency
+                    dto.setBaseCurrency(client.getBaseCurrency());
+                    
+                    Money amountMoney = tx.getMonetaryAmount().with(converter.at(tx.getDateTime()));
+                    double convertedAmount = -(amountMoney.getAmount() / Values.Amount.divider());
+                    dto.setAmountInBaseCurrency(convertedAmount);
+                    dto.setGrossValueInBaseCurrency(convertedAmount);
+                    dto.setTaxesInBaseCurrency(0.0);
+                    dto.setFeesInBaseCurrency(Math.abs(convertedAmount));
+                    
+                    // Add security information if available
+                    if (tx.getSecurity() != null) {
+                        dto.setSecurityUuid(tx.getSecurity().getUUID());
+                        dto.setSecurityName(tx.getSecurity().getName());
+                        dto.setSecurityIsin(tx.getSecurity().getIsin());
+                    }
+                    
+                    // Add account information
+                    dto.setAccountUuid(account.getUUID());
+                    dto.setAccountName(account.getName());
+                    dto.setNote(tx.getNote());
+                    dto.setSource(tx.getSource());
+                    
+                    optionsEarnings.add(dto);
+                }
+            }
+            
+            // Sort by date (most recent first)
+            optionsEarnings.sort((a, b) -> b.getDateTime().compareTo(a.getDateTime()));
+            
+            // Calculate totals in base currency (for consistent aggregation across currencies)
+            double totalAmountInBaseCurrency = optionsEarnings.stream()
+                .mapToDouble(EarningsTransactionDto::getAmountInBaseCurrency)
+                .sum();
+            double totalGrossValueInBaseCurrency = optionsEarnings.stream()
+                .mapToDouble(EarningsTransactionDto::getGrossValueInBaseCurrency)
+                .sum();
+            double totalTaxesInBaseCurrency = optionsEarnings.stream()
+                .mapToDouble(EarningsTransactionDto::getTaxesInBaseCurrency)
+                .sum();
+            double totalFeesInBaseCurrency = optionsEarnings.stream()
+                .mapToDouble(EarningsTransactionDto::getFeesInBaseCurrency)
+                .sum();
+            
+            // Create response
+            Map<String, Object> response = new HashMap<>();
+            response.put("portfolioId", portfolioId);
+            response.put("startDate", start);
+            response.put("endDate", end);
+            response.put("count", optionsEarnings.size());
+            response.put("baseCurrency", client.getBaseCurrency());
+            response.put("totalAmountInBaseCurrency", totalAmountInBaseCurrency);
+            response.put("totalGrossValueInBaseCurrency", totalGrossValueInBaseCurrency);
+            response.put("totalTaxesInBaseCurrency", totalTaxesInBaseCurrency);
+            response.put("totalFeesInBaseCurrency", totalFeesInBaseCurrency);
+            response.put("optionsEarnings", optionsEarnings);
+            response.put("timezone", ZoneId.systemDefault().getId());
+            
+            logger.info("Returning {} options earnings transactions for portfolio {} (total in base currency: {}, gross: {})", 
+                optionsEarnings.size(), portfolioId, totalAmountInBaseCurrency, totalGrossValueInBaseCurrency);
+            
+            return Response.ok(response).build();
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error getting options earnings for portfolio {}: {}", 
                 portfolioId, e.getMessage(), e);
             return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
                 "Internal server error", 
