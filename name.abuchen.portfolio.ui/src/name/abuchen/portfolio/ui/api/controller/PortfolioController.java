@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
 
 import name.abuchen.portfolio.ui.api.dto.EarningsTransactionDto;
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
-import name.abuchen.portfolio.ui.api.dto.SecurityPriceDto;
 import name.abuchen.portfolio.ui.api.dto.ValueDataPointDto;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
 import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
@@ -382,80 +381,6 @@ public class PortfolioController {
                 e.getMessage());
         } catch (Exception e) {
             logger.error("Unexpected error updating prices for portfolio " + portfolioId + ": " + e.getMessage(), e);
-            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
-                "Internal server error", 
-                e.getMessage());
-        }
-    }
-    
-    /**
-     * Get historical prices for a specific security.
-     * 
-     * This endpoint returns all historical prices for a security identified by its UUID.
-     * The prices are returned in chronological order with dates and values.
-     * 
-     * @param portfolioId The portfolio ID
-     * @param securityUuid The security UUID
-     * @return Response containing the security's historical prices
-     */
-    @GET
-    @Path("/{portfolioId}/securities/{securityUuid}/prices")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response getSecurityPrices(@PathParam("portfolioId") String portfolioId,
-                                     @PathParam("securityUuid") String securityUuid) {
-        try {
-            logger.info("Getting prices for security {} in portfolio {}", securityUuid, portfolioId);
-            
-            // Get the cached Client for this portfolio
-            Client client = portfolioFileService.getPortfolio(portfolioId);
-            
-            if (client == null) {
-                logger.warn("No cached client found for portfolio: " + portfolioId);
-                return createPreconditionRequiredResponse(
-                    "PORTFOLIO_NOT_LOADED", 
-                    "Portfolio must be opened first before accessing security prices");
-            }
-            
-            // Find the security by UUID
-            Security security = client.getSecurities().stream()
-                .filter(s -> securityUuid.equals(s.getUUID()))
-                .findFirst()
-                .orElse(null);
-            
-            if (security == null) {
-                logger.warn("Security not found: {} in portfolio: {}", securityUuid, portfolioId);
-                return createErrorResponse(Response.Status.NOT_FOUND, 
-                    "Security not found", 
-                    "Security with UUID " + securityUuid + " not found in portfolio");
-            }
-            
-            // Convert SecurityPrice list to DTO list
-            List<SecurityPriceDto> priceDtos = security.getPrices().stream()
-                .map(price -> new SecurityPriceDto(
-                    price.getDate(),
-                    price.getValue() / Values.Quote.divider()
-                ))
-                .collect(Collectors.toList());
-            
-            // Create response with security info and prices
-            Map<String, Object> response = new HashMap<>();
-            response.put("portfolioId", portfolioId);
-            response.put("securityUuid", securityUuid);
-            response.put("securityName", security.getName());
-            response.put("currencyCode", security.getCurrencyCode());
-            response.put("isin", security.getIsin());
-            response.put("tickerSymbol", security.getTickerSymbol());
-            response.put("pricesCount", priceDtos.size());
-            response.put("prices", priceDtos);
-            response.put("timezone", ZoneId.systemDefault().getId());
-            
-            logger.info("Returning {} prices for security {} ({})", priceDtos.size(), security.getName(), securityUuid);
-            
-            return Response.ok(response).build();
-            
-        } catch (Exception e) {
-            logger.error("Unexpected error getting prices for security {} in portfolio {}: {}", 
-                securityUuid, portfolioId, e.getMessage(), e);
             return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
                 "Internal server error", 
                 e.getMessage());

@@ -47,6 +47,10 @@ public class PortfolioApiServer
         PortfolioLog.info("  GET /api/v1/portfolios/health - Health check");
         PortfolioLog.info("  GET /api/v1/portfolios/{portfolioId} - Get portfolio by ID");
         PortfolioLog.info("  GET /api/v1/portfolios/{portfolioId}/widgetData - Get widget data");
+        PortfolioLog.info("  GET /api/v1/portfolios/{portfolioId}/securities/{securityUuid}/prices - Get security prices");
+        PortfolioLog.info("  POST /api/v1/portfolios/{portfolioId}/securities/{securityUuid}/prices - Add security price");
+        PortfolioLog.info("  PUT /api/v1/portfolios/{portfolioId}/securities/{securityUuid}/prices/{date} - Update security price");
+        PortfolioLog.info("  DELETE /api/v1/portfolios/{portfolioId}/securities/{securityUuid}/prices/{date} - Delete security price");
         PortfolioLog.info("");
         PortfolioLog.info("🌐 Server running at: http://localhost:" + port);
     }
