@@ -49,6 +49,7 @@ import name.abuchen.portfolio.snapshot.AccountSnapshot;
 import name.abuchen.portfolio.snapshot.PortfolioSnapshot;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 
 /**
  * REST Controller for portfolio operations.
@@ -139,6 +140,7 @@ public class PortfolioController {
         health.put("status", "UP");
         health.put("service", "PortfolioFileService");
         health.put("timestamp", java.time.LocalDateTime.now().toString());
+        health.put("timezone", ZoneId.systemDefault().getId());
         health.put("cacheStats", portfolioFileService.getCacheStats());
         
         return Response.ok(health).build();
@@ -444,6 +446,7 @@ public class PortfolioController {
             response.put("tickerSymbol", security.getTickerSymbol());
             response.put("pricesCount", priceDtos.size());
             response.put("prices", priceDtos);
+            response.put("timezone", ZoneId.systemDefault().getId());
             
             logger.info("Returning {} prices for security {} ({})", priceDtos.size(), security.getName(), securityUuid);
             
@@ -547,6 +550,7 @@ public class PortfolioController {
             response.put("endDate", end);
             response.put("dataPointsCount", valuePoints.size());
             response.put("values", valuePoints);
+            response.put("timezone", ZoneId.systemDefault().getId());
             
             logger.info("Returning {} value data points for account {} ({})", 
                 valuePoints.size(), account.getName(), accountUuid);
@@ -651,6 +655,7 @@ public class PortfolioController {
             response.put("endDate", end);
             response.put("dataPointsCount", valuePoints.size());
             response.put("values", valuePoints);
+            response.put("timezone", ZoneId.systemDefault().getId());
             
             logger.info("Returning {} value data points for portfolio {} ({})", 
                 valuePoints.size(), portfolio.getName(), securityAccountUuid);
@@ -841,6 +846,7 @@ public class PortfolioController {
             response.put("totalTaxesInBaseCurrency", totalTaxesInBaseCurrency);
             response.put("totalFeesInBaseCurrency", totalFeesInBaseCurrency);
             response.put("earnings", earnings);
+            response.put("timezone", ZoneId.systemDefault().getId());
             
             logger.info("Returning {} earnings transactions for portfolio {} (total in base currency: {}, gross: {})", 
                 earnings.size(), portfolioId, totalAmountInBaseCurrency, totalGrossValueInBaseCurrency);

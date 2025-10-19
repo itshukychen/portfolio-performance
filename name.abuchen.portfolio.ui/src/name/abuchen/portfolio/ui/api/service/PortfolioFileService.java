@@ -251,6 +251,7 @@ public class PortfolioFileService {
         }
         
         fileInfo.setBaseCurrency(client.getBaseCurrency());
+        fileInfo.setTimezone(ZoneId.systemDefault().getId());
         fileInfo.setVersion(client.getFileVersionAfterRead());
         // Note: securitiesCount will be set by loadSecurities() after filtering
         fileInfo.setAccountsCount(client.getAccounts().size());

@@ -15,6 +15,7 @@ public class PortfolioFileInfo {
     private String id;
     private String name;
     private String baseCurrency;
+    private String timezone;
     private int version;
     private Set<String> saveFlags;
     private LocalDateTime lastModified;
@@ -62,6 +63,14 @@ public class PortfolioFileInfo {
     
     public void setBaseCurrency(String baseCurrency) {
         this.baseCurrency = baseCurrency;
+    }
+    
+    public String getTimezone() {
+        return timezone;
+    }
+    
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
     }
     
     public int getVersion() {
