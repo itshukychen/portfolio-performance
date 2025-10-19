@@ -16,6 +16,14 @@ public class EarningsTransactionDto {
     private double grossValue; // Gross amount before taxes and fees
     private double taxes;
     private double fees;
+    
+    // Converted amounts in client base currency
+    private String baseCurrency;
+    private double amountInBaseCurrency;
+    private double grossValueInBaseCurrency;
+    private double taxesInBaseCurrency;
+    private double feesInBaseCurrency;
+    
     private String securityUuid;
     private String securityName;
     private String securityIsin;
@@ -90,6 +98,46 @@ public class EarningsTransactionDto {
     
     public void setFees(double fees) {
         this.fees = fees;
+    }
+    
+    public String getBaseCurrency() {
+        return baseCurrency;
+    }
+    
+    public void setBaseCurrency(String baseCurrency) {
+        this.baseCurrency = baseCurrency;
+    }
+    
+    public double getAmountInBaseCurrency() {
+        return amountInBaseCurrency;
+    }
+    
+    public void setAmountInBaseCurrency(double amountInBaseCurrency) {
+        this.amountInBaseCurrency = amountInBaseCurrency;
+    }
+    
+    public double getGrossValueInBaseCurrency() {
+        return grossValueInBaseCurrency;
+    }
+    
+    public void setGrossValueInBaseCurrency(double grossValueInBaseCurrency) {
+        this.grossValueInBaseCurrency = grossValueInBaseCurrency;
+    }
+    
+    public double getTaxesInBaseCurrency() {
+        return taxesInBaseCurrency;
+    }
+    
+    public void setTaxesInBaseCurrency(double taxesInBaseCurrency) {
+        this.taxesInBaseCurrency = taxesInBaseCurrency;
+    }
+    
+    public double getFeesInBaseCurrency() {
+        return feesInBaseCurrency;
+    }
+    
+    public void setFeesInBaseCurrency(double feesInBaseCurrency) {
+        this.feesInBaseCurrency = feesInBaseCurrency;
     }
     
     public String getSecurityUuid() {

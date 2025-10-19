@@ -728,6 +728,10 @@ public class PortfolioController {
                     break;
             }
             
+            // Create currency converter for base currency conversion
+            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+            CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+            
             // Collect all earnings transactions from all accounts
             List<EarningsTransactionDto> earnings = new ArrayList<>();
             
@@ -750,17 +754,36 @@ public class PortfolioController {
                     dto.setDateTime(tx.getDateTime());
                     dto.setType(tx.getType().name());
                     dto.setCurrencyCode(tx.getCurrencyCode());
-                    dto.setAmount(tx.getAmount() / Values.Amount.divider());
-                    dto.setGrossValue(tx.getGrossValueAmount() / Values.Amount.divider());
                     
-                    // Calculate taxes and fees
-                    double taxes = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.TAX)
-                        .getAmount() / Values.Amount.divider();
-                    double fees = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.FEE)
-                        .getAmount() / Values.Amount.divider();
+                    // Original currency amounts
+                    double amount = tx.getAmount() / Values.Amount.divider();
+                    double grossValue = tx.getGrossValueAmount() / Values.Amount.divider();
                     
+                    Money taxesMoney = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.TAX);
+                    Money feesMoney = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.FEE);
+                    
+                    double taxes = taxesMoney.getAmount() / Values.Amount.divider();
+                    double fees = feesMoney.getAmount() / Values.Amount.divider();
+                    
+                    dto.setAmount(amount);
+                    dto.setGrossValue(grossValue);
                     dto.setTaxes(taxes);
                     dto.setFees(fees);
+                    
+                    // Converted amounts in base currency
+                    dto.setBaseCurrency(client.getBaseCurrency());
+                    
+                    Money amountMoney = tx.getMonetaryAmount().with(converter.at(tx.getDateTime()));
+                    dto.setAmountInBaseCurrency(amountMoney.getAmount() / Values.Amount.divider());
+                    
+                    Money grossValueMoney = tx.getGrossValue().with(converter.at(tx.getDateTime()));
+                    dto.setGrossValueInBaseCurrency(grossValueMoney.getAmount() / Values.Amount.divider());
+                    
+                    Money taxesConverted = taxesMoney.with(converter.at(tx.getDateTime()));
+                    dto.setTaxesInBaseCurrency(taxesConverted.getAmount() / Values.Amount.divider());
+                    
+                    Money feesConverted = feesMoney.with(converter.at(tx.getDateTime()));
+                    dto.setFeesInBaseCurrency(feesConverted.getAmount() / Values.Amount.divider());
                     
                     // Add security information if available
                     if (tx.getSecurity() != null) {
@@ -782,18 +805,18 @@ public class PortfolioController {
             // Sort by date (most recent first)
             earnings.sort((a, b) -> b.getDateTime().compareTo(a.getDateTime()));
             
-            // Calculate totals
-            double totalAmount = earnings.stream()
-                .mapToDouble(EarningsTransactionDto::getAmount)
+            // Calculate totals in base currency (for consistent aggregation across currencies)
+            double totalAmountInBaseCurrency = earnings.stream()
+                .mapToDouble(EarningsTransactionDto::getAmountInBaseCurrency)
                 .sum();
-            double totalGrossValue = earnings.stream()
-                .mapToDouble(EarningsTransactionDto::getGrossValue)
+            double totalGrossValueInBaseCurrency = earnings.stream()
+                .mapToDouble(EarningsTransactionDto::getGrossValueInBaseCurrency)
                 .sum();
-            double totalTaxes = earnings.stream()
-                .mapToDouble(EarningsTransactionDto::getTaxes)
+            double totalTaxesInBaseCurrency = earnings.stream()
+                .mapToDouble(EarningsTransactionDto::getTaxesInBaseCurrency)
                 .sum();
-            double totalFees = earnings.stream()
-                .mapToDouble(EarningsTransactionDto::getFees)
+            double totalFeesInBaseCurrency = earnings.stream()
+                .mapToDouble(EarningsTransactionDto::getFeesInBaseCurrency)
                 .sum();
             
             // Create response
@@ -803,15 +826,15 @@ public class PortfolioController {
             response.put("endDate", end);
             response.put("filterType", filterType);
             response.put("count", earnings.size());
-            response.put("totalAmount", totalAmount);
-            response.put("totalGrossValue", totalGrossValue);
-            response.put("totalTaxes", totalTaxes);
-            response.put("totalFees", totalFees);
             response.put("baseCurrency", client.getBaseCurrency());
+            response.put("totalAmountInBaseCurrency", totalAmountInBaseCurrency);
+            response.put("totalGrossValueInBaseCurrency", totalGrossValueInBaseCurrency);
+            response.put("totalTaxesInBaseCurrency", totalTaxesInBaseCurrency);
+            response.put("totalFeesInBaseCurrency", totalFeesInBaseCurrency);
             response.put("earnings", earnings);
             
-            logger.info("Returning {} earnings transactions for portfolio {} (total: {}, gross: {})", 
-                earnings.size(), portfolioId, totalAmount, totalGrossValue);
+            logger.info("Returning {} earnings transactions for portfolio {} (total in base currency: {}, gross: {})", 
+                earnings.size(), portfolioId, totalAmountInBaseCurrency, totalGrossValueInBaseCurrency);
             
             return Response.ok(response).build();
             
