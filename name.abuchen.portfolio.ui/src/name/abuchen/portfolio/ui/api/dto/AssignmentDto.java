@@ -10,6 +10,7 @@ public class AssignmentDto {
     private String investmentVehicleName;
     private int weight;
     private int rank;
+    private Double proportion; // Actual % - proportion of parent classification
     
     // Constructors
     public AssignmentDto() {}
@@ -51,6 +52,14 @@ public class AssignmentDto {
     
     public void setRank(int rank) {
         this.rank = rank;
+    }
+    
+    public Double getProportion() {
+        return proportion;
+    }
+    
+    public void setProportion(Double proportion) {
+        this.proportion = proportion;
     }
 }
 

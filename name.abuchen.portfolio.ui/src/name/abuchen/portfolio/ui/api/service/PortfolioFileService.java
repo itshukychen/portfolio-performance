@@ -35,6 +35,8 @@ import name.abuchen.portfolio.ui.api.dto.SecurityDto;
 import name.abuchen.portfolio.ui.api.dto.TaxonomyDto;
 import name.abuchen.portfolio.ui.api.dto.TransactionDto;
 import name.abuchen.portfolio.ui.api.util.DashboardConverter;
+import name.abuchen.portfolio.ui.views.taxonomy.TaxonomyModel;
+import name.abuchen.portfolio.ui.views.taxonomy.TaxonomyNode;
 import name.abuchen.portfolio.model.AccountTransaction;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.ClientFactory;
@@ -561,6 +563,9 @@ public class PortfolioFileService {
     private void loadTaxonomies(PortfolioFileInfo fileInfo, Client client) {
         List<TaxonomyDto> taxonomyDtos = new ArrayList<>();
         
+        // Create factory for exchange rates
+        ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+        
         for (name.abuchen.portfolio.model.Taxonomy taxonomy : client.getTaxonomies()) {
             TaxonomyDto dto = new TaxonomyDto();
             dto.setId(taxonomy.getId());
@@ -570,9 +575,12 @@ public class PortfolioFileService {
             dto.setClassificationsCount(taxonomy.getAllClassifications().size());
             dto.setHeight(taxonomy.getHeigth());
             
+            // Create TaxonomyModel to calculate actual values and proportions
+            TaxonomyModel model = new TaxonomyModel(factory, client, taxonomy);
+            
             // Convert the root classification
             if (taxonomy.getRoot() != null) {
-                dto.setRoot(convertClassification(taxonomy.getRoot()));
+                dto.setRoot(convertClassification(taxonomy.getRoot(), model.getClassificationRootNode()));
             }
             
             taxonomyDtos.add(dto);
@@ -586,9 +594,10 @@ public class PortfolioFileService {
      * Recursively converts a Classification to a ClassificationDto.
      * 
      * @param classification The classification to convert
+     * @param taxonomyNode The corresponding TaxonomyNode (used to calculate proportions)
      * @return The converted ClassificationDto
      */
-    private ClassificationDto convertClassification(name.abuchen.portfolio.model.Classification classification) {
+    private ClassificationDto convertClassification(name.abuchen.portfolio.model.Classification classification, TaxonomyNode taxonomyNode) {
         ClassificationDto dto = new ClassificationDto();
         dto.setId(classification.getId());
         dto.setName(classification.getName());
@@ -598,6 +607,22 @@ public class PortfolioFileService {
         dto.setRank(classification.getRank());
         dto.setKey(classification.getKey());
         
+        // Calculate proportion (Actual %) for this classification relative to its parent
+        if (taxonomyNode != null && taxonomyNode.getParent() != null) {
+            TaxonomyNode parentNode = taxonomyNode.getParent();
+            if (parentNode.getActual() != null && parentNode.getActual().getAmount() > 0 &&
+                taxonomyNode.getActual() != null) {
+                long parentActualAmount = parentNode.getActual().getAmount();
+                long actualAmount = taxonomyNode.getActual().getAmount();
+                double proportion = (double) actualAmount / (double) parentActualAmount;
+                dto.setProportion(proportion);
+            }
+        }
+        
+        // Get parent actual amount for calculating assignment proportions
+        long parentActual = taxonomyNode != null && taxonomyNode.getActual() != null 
+            ? taxonomyNode.getActual().getAmount() : 0;
+        
         // Convert assignments
         List<AssignmentDto> assignmentDtos = new ArrayList<>();
         for (name.abuchen.portfolio.model.Classification.Assignment assignment : classification.getAssignments()) {
@@ -606,6 +631,17 @@ public class PortfolioFileService {
             assignmentDto.setInvestmentVehicleName(assignment.getInvestmentVehicle().getName());
             assignmentDto.setWeight(assignment.getWeight());
             assignmentDto.setRank(assignment.getRank());
+            
+            // Calculate proportion (Actual %) from TaxonomyNode
+            if (taxonomyNode != null && parentActual > 0) {
+                TaxonomyNode assignmentNode = findAssignmentNode(taxonomyNode, assignment);
+                if (assignmentNode != null && assignmentNode.getActual() != null) {
+                    long actual = assignmentNode.getActual().getAmount();
+                    double proportion = (double) actual / (double) parentActual;
+                    assignmentDto.setProportion(proportion);
+                }
+            }
+            
             assignmentDtos.add(assignmentDto);
         }
         dto.setAssignments(assignmentDtos);
@@ -613,11 +649,51 @@ public class PortfolioFileService {
         // Recursively convert children
         List<ClassificationDto> childrenDtos = new ArrayList<>();
         for (name.abuchen.portfolio.model.Classification child : classification.getChildren()) {
-            childrenDtos.add(convertClassification(child));
+            // Find the corresponding child node
+            TaxonomyNode childNode = findChildNode(taxonomyNode, child);
+            childrenDtos.add(convertClassification(child, childNode));
         }
         dto.setChildren(childrenDtos);
         
         return dto;
+    }
+    
+    /**
+     * Finds the assignment node that corresponds to the given assignment.
+     * 
+     * @param parentNode The parent taxonomy node
+     * @param assignment The assignment to find
+     * @return The matching TaxonomyNode or null if not found
+     */
+    private TaxonomyNode findAssignmentNode(TaxonomyNode parentNode, name.abuchen.portfolio.model.Classification.Assignment assignment) {
+        if (parentNode == null) return null;
+        
+        for (TaxonomyNode child : parentNode.getChildren()) {
+            if (child.isAssignment() && 
+                child.getAssignment().getInvestmentVehicle().equals(assignment.getInvestmentVehicle())) {
+                return child;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Finds the child taxonomy node that corresponds to the given classification.
+     * 
+     * @param parentNode The parent taxonomy node
+     * @param classification The classification to find
+     * @return The matching TaxonomyNode or null if not found
+     */
+    private TaxonomyNode findChildNode(TaxonomyNode parentNode, name.abuchen.portfolio.model.Classification classification) {
+        if (parentNode == null) return null;
+        
+        for (TaxonomyNode child : parentNode.getChildren()) {
+            if (child.isClassification() && 
+                child.getClassification().getId().equals(classification.getId())) {
+                return child;
+            }
+        }
+        return null;
     }
     
     /**

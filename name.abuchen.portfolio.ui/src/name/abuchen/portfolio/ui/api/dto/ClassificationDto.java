@@ -15,6 +15,7 @@ public class ClassificationDto {
     private int weight;
     private int rank;
     private String key;
+    private Double proportion; // Actual % - proportion of parent classification
     private List<ClassificationDto> children;
     private List<AssignmentDto> assignments;
     
@@ -81,6 +82,14 @@ public class ClassificationDto {
     
     public void setKey(String key) {
         this.key = key;
+    }
+    
+    public Double getProportion() {
+        return proportion;
+    }
+    
+    public void setProportion(Double proportion) {
+        this.proportion = proportion;
     }
     
     public List<ClassificationDto> getChildren() {
