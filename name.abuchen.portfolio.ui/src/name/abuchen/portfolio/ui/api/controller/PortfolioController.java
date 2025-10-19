@@ -30,6 +30,7 @@ import name.abuchen.portfolio.ui.api.dto.SecurityPriceDto;
 import name.abuchen.portfolio.ui.api.dto.ValueDataPointDto;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
 import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
+import name.abuchen.portfolio.ui.api.service.ScheduledExchangeRateUpdateService;
 import name.abuchen.portfolio.ui.api.service.WidgetDataService;
 import name.abuchen.portfolio.ui.jobs.priceupdate.UpdatePricesJob;
 import name.abuchen.portfolio.model.Account;
@@ -63,6 +64,7 @@ public class PortfolioController {
     // Use static singleton to ensure cache is shared across all API calls
     private static final PortfolioFileService portfolioFileService = PortfolioFileService.getInstance();
     private static final WidgetDataService widgetDataService = new WidgetDataService();
+    private static final ScheduledExchangeRateUpdateService exchangeRateUpdateService = new ScheduledExchangeRateUpdateService();
     
     /**
      * Helper method to create error responses with consistent structure.
@@ -305,13 +307,15 @@ public class PortfolioController {
     }
     
     /**
-     * Update prices for all active (non-retired) securities in the portfolio.
+     * Update prices and exchange rates for the portfolio.
      * 
      * This endpoint triggers a price update job that fetches both latest and historic quotes
-     * for all securities in the portfolio that are not marked as retired.
+     * for all securities in the portfolio that are not marked as retired. After updating 
+     * security prices, it also updates exchange rates from all registered exchange rate 
+     * providers, similar to the scheduled exchange rate update service.
      * 
      * @param portfolioId The portfolio ID
-     * @return Response indicating the price update job was scheduled
+     * @return Response with updated portfolio information
      */
     @POST
     @Path("/{portfolioId}/updatePrices")
@@ -350,7 +354,12 @@ public class PortfolioController {
             // Wait for the job to complete
             updateJob.join();
             
-            logger.info("Price update job completed. Saving portfolio file...");
+            logger.info("Price update job completed. Now updating exchange rates...");
+            
+            // Update exchange rates (like the scheduled job does)
+            exchangeRateUpdateService.updateExchangeRates();
+            
+            logger.info("Exchange rates updated. Saving portfolio file...");
             
             // Save the portfolio file after the update
             portfolioFileService.saveFile(portfolioId);

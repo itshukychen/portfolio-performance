@@ -91,9 +91,9 @@ public class ScheduledExchangeRateUpdateService {
     
     /**
      * Update exchange rates from online sources.
-     * This method is called periodically by the scheduler.
+     * This method is called periodically by the scheduler and can also be called manually.
      */
-    private void updateExchangeRates() {
+    public void updateExchangeRates() {
         try {
             logger.info("========================================");
             logger.info("💱 Starting scheduled exchange rate update");
