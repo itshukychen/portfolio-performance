@@ -64,6 +64,28 @@
 			<modules>
 				<module>../portfolio-product</module>
 			</modules>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.eclipse.tycho</groupId>
+						<artifactId>target-platform-configuration</artifactId>
+						<configuration>
+							<environments>
+								<environment>
+									<os>linux</os>
+									<ws>gtk</ws>
+									<arch>x86_64</arch>
+								</environment>
+								<environment>
+									<os>macosx</os>
+									<ws>cocoa</ws>
+									<arch>aarch64</arch>
+								</environment>
+							</environments>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
 		</profile>
 		<profile>
 			<!--
@@ -81,6 +103,41 @@
 				<checkstyle.skip>true</checkstyle.skip>
 				<protobuf.execution.phase>none</protobuf.execution.phase>
 			</properties>
+		</profile>
+		<profile>
+			<!--
+				macos-only (activate by appending -Pmacos-only to your Maven command line)
+				
+			    Build only for macOS to speed up local development builds.
+			    This reduces dependency resolution time significantly.
+			-->
+			<id>macos-only</id>
+			<properties>
+				<target-file-name>portfolio-target-definition-local-dev</target-file-name>
+				<jacoco.skip>false</jacoco.skip>
+				<checkstyle.skip>false</checkstyle.skip>
+				<protobuf.execution.phase>none</protobuf.execution.phase>
+			</properties>
+			<modules>
+				<module>../portfolio-product</module>
+			</modules>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.eclipse.tycho</groupId>
+						<artifactId>target-platform-configuration</artifactId>
+						<configuration>
+							<environments>
+								<environment>
+									<os>macosx</os>
+									<ws>cocoa</ws>
+									<arch>aarch64</arch>
+								</environment>
+							</environments>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
 		</profile>
 	</profiles>
 
@@ -135,13 +192,6 @@
 							<classifier>${target-file-name}</classifier>
 						</artifact>
 					</target>
-					<environments>
-						<environment>
-								<os>linux</os>
-								<ws>gtk</ws>
-								<arch>x86_64</arch>
-						</environment>
-					</environments>
 					<filters>
 						<filter>	
 							<type>eclipse-plugin</type>

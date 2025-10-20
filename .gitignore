@@ -12,3 +12,5 @@ workspace
 
 .claude/settings.local.json
 portfolios
+.vscode
+web

@@ -24,14 +24,34 @@
 		<unit id="org.mockito.mockito-core.source" version="5.14.2"/>
 		<unit id="slf4j.api" version="2.0.16"/>
 		<unit id="slf4j.api.source" version="2.0.16"/>
+		<unit id="slf4j.simple" version="2.0.16"/>
+		<unit id="slf4j.simple.source" version="2.0.16"/>
 	</location>
 	<location includeAllPlatforms="false" includeConfigurePhase="false" includeMode="planner" includeSource="true" type="InstallableUnit">
 		<repository location="https://download.eclipse.org/nebula/archive/releases/3.1.1/"/>
 		<unit id="org.eclipse.nebula.widgets.cdatetime.feature.feature.group" version="1.5.0.202402011804"/>
 		<unit id="org.eclipse.nebula.widgets.chips.feature.feature.group" version="1.0.0.202402011804"/>
 	</location>
-	
-	<!-- remove babel translations --> 
+	<location includeAllPlatforms="false" includeConfigurePhase="false" includeMode="planner" includeSource="true" type="InstallableUnit">
+		<repository location="https://download.eclipse.org/technology/babel/update-site/R0.20.0/2022-12/"/>
+		<unit id="org.eclipse.babel.nls_eclipse_de.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_es.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_fr.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_it.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_nl.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_pt.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_pt_BR.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_cs.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_ru.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_sk.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_pl.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_zh.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_zh_TW.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_da.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_tr.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_vi.feature.group" version="4.26.0.v20230220105658"/>
+		<unit id="org.eclipse.babel.nls_eclipse_ca.feature.group" version="4.26.0.v20230220105658"/>
+	</location> 
 	
 	<location includeAllPlatforms="false" includeConfigurePhase="false" includeMode="planner" includeSource="true" type="InstallableUnit">
 		<repository location="https://download.eclipse.org/swtchart/releases/1.0.0/repository"/>
@@ -350,6 +370,261 @@
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-databind</artifactId>
 				<version>2.18.2</version>
+				<type>jar</type>
+			</dependency>
+		</dependencies>
+	</location>
+	<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true" label="Java Servlet API" missingManifest="generate" type="Maven">
+		<dependencies>
+			<dependency>
+				<groupId>javax.servlet</groupId>
+				<artifactId>javax.servlet-api</artifactId>
+				<version>3.1.0</version>
+				<type>jar</type>
+			</dependency>
+		</dependencies>
+	</location>
+	<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true" label="Java REST API" missingManifest="generate" type="Maven">
+		<dependencies>
+			<dependency>
+				<groupId>javax.ws.rs</groupId>
+				<artifactId>javax.ws.rs-api</artifactId>
+				<version>2.1.1</version>
+				<type>jar</type>
+			</dependency>
+		</dependencies>
+	</location>
+	<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true" label="JAXB API" missingManifest="generate" type="Maven">
+		<dependencies>
+			<dependency>
+				<groupId>javax.xml.bind</groupId>
+				<artifactId>jaxb-api</artifactId>
+				<version>2.3.1</version>
+				<type>jar</type>
+			</dependency>
+		</dependencies>
+	</location>
+	<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true" label="Java Inject API" missingManifest="generate" type="Maven">
+		<dependencies>
+			<dependency>
+				<groupId>javax.inject</groupId>
+				<artifactId>javax.inject</artifactId>
+				<version>1</version>
+				<type>jar</type>
+			</dependency>
+		</dependencies>
+	</location>
+	<location includeAllPlatforms="false" includeConfigurePhase="true" includeMode="planner" includeSource="true" type="InstallableUnit">
+		<repository location="https://download.eclipse.org/jetty/updates/jetty-bundles-9.x/9.4.54.v20240208/"/>
+		<unit id="org.eclipse.jetty.util" version="9.4.54.v20240208"/>
+		<unit id="org.eclipse.jetty.io" version="9.4.54.v20240208"/>
+		<unit id="org.eclipse.jetty.http" version="9.4.54.v20240208"/>
+		<unit id="org.eclipse.jetty.server" version="9.4.54.v20240208"/>
+		<unit id="org.eclipse.jetty.servlet" version="9.4.54.v20240208"/>
+		<unit id="org.eclipse.jetty.security" version="9.4.54.v20240208"/>
+	</location>
+	<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true" label="Jersey JAX-RS" missingManifest="generate" type="Maven">
+		<dependencies>
+			<!-- Jersey Core -->
+			<dependency>
+				<groupId>org.glassfish.jersey.core</groupId>
+				<artifactId>jersey-server</artifactId>
+				<version>2.41</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.jersey.core</groupId>
+				<artifactId>jersey-common</artifactId>
+				<version>2.41</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.jersey.core</groupId>
+				<artifactId>jersey-client</artifactId>
+				<version>2.41</version>
+				<type>jar</type>
+			</dependency>
+
+			<!-- Jersey Containers -->
+			<dependency>
+				<groupId>org.glassfish.jersey.containers</groupId>
+				<artifactId>jersey-container-servlet</artifactId>
+				<version>2.41</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.jersey.containers</groupId>
+				<artifactId>jersey-container-servlet-core</artifactId>
+				<version>2.41</version>
+				<type>jar</type>
+			</dependency>
+
+			<!-- Jersey Media -->
+			<dependency>
+				<groupId>org.glassfish.jersey.media</groupId>
+				<artifactId>jersey-media-json-jackson</artifactId>
+				<version>2.41</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.jersey.ext</groupId>
+				<artifactId>jersey-entity-filtering</artifactId>
+				<version>2.41</version>
+				<type>jar</type>
+			</dependency>
+
+			<!-- Jersey HK2 Integration -->
+			<dependency>
+				<groupId>org.glassfish.jersey.inject</groupId>
+				<artifactId>jersey-hk2</artifactId>
+				<version>2.41</version>
+				<type>jar</type>
+			</dependency>
+
+			<!-- HK2 Core -->
+			<dependency>
+				<groupId>org.glassfish.hk2</groupId>
+				<artifactId>hk2-api</artifactId>
+				<version>2.6.1</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.hk2</groupId>
+				<artifactId>hk2-locator</artifactId>
+				<version>2.6.1</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.hk2</groupId>
+				<artifactId>hk2-utils</artifactId>
+				<version>2.6.1</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.hk2</groupId>
+				<artifactId>osgi-resource-locator</artifactId>
+				<version>1.0.3</version>
+				<type>jar</type>
+			</dependency>
+
+			<!-- AOP Alliance -->
+			<dependency>
+				<groupId>org.glassfish.hk2.external</groupId>
+				<artifactId>aopalliance-repackaged</artifactId>
+				<version>2.6.1</version>
+				<type>jar</type>
+			</dependency>
+
+			<!-- Javassist for HK2 -->
+			<dependency>
+				<groupId>org.javassist</groupId>
+				<artifactId>javassist</artifactId>
+				<version>3.22.0-GA</version>
+				<type>jar</type>
+			</dependency>
+		</dependencies>
+	</location>
+
+	<!-- Bean Validation (javax) -->
+	<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true"
+	         label="Bean Validation (javax)" missingManifest="generate" type="Maven">
+	  <dependencies>
+	    <!-- API -->
+	    <dependency>
+	      <groupId>javax.validation</groupId>
+	      <artifactId>validation-api</artifactId>
+	      <version>2.0.1.Final</version>
+	      <type>jar</type>
+	    </dependency>
+
+	    <!-- Reference implementation -->
+	    <dependency>
+	      <groupId>org.hibernate.validator</groupId>
+	      <artifactId>hibernate-validator</artifactId>
+	      <version>6.2.5.Final</version>
+	      <type>jar</type>
+	    </dependency>
+
+	    <!-- HV runtime deps -->
+	    <dependency>
+	      <groupId>com.fasterxml</groupId>
+	      <artifactId>classmate</artifactId>
+	      <version>1.5.1</version>
+	      <type>jar</type>
+	    </dependency>
+	    <dependency>
+	      <groupId>org.glassfish</groupId>
+	      <artifactId>javax.el</artifactId>
+	      <version>3.0.1-b11</version>
+	      <type>jar</type>
+	    </dependency>
+	  </dependencies>
+	</location>
+
+	<!-- Jackson JSON Processing -->
+	<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true" label="Jackson JSON" missingManifest="generate" type="Maven">
+		<dependencies>
+			<dependency>
+				<groupId>com.fasterxml.jackson.core</groupId>
+				<artifactId>jackson-core</artifactId>
+				<version>2.15.2</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>com.fasterxml.jackson.core</groupId>
+				<artifactId>jackson-databind</artifactId>
+				<version>2.15.2</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>com.fasterxml.jackson.core</groupId>
+				<artifactId>jackson-annotations</artifactId>
+				<version>2.15.2</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>com.fasterxml.jackson.datatype</groupId>
+				<artifactId>jackson-datatype-jsr310</artifactId>
+				<version>2.15.2</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>com.fasterxml.jackson.jaxrs</groupId>
+				<artifactId>jackson-jaxrs-base</artifactId>
+				<version>2.15.2</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>com.fasterxml.jackson.jaxrs</groupId>
+				<artifactId>jackson-jaxrs-json-provider</artifactId>
+				<version>2.15.2</version>
+				<type>jar</type>
+			</dependency>
+			<dependency>
+				<groupId>com.fasterxml.jackson.module</groupId>
+				<artifactId>jackson-module-jaxb-annotations</artifactId>
+				<version>2.15.2</version>
+				<type>jar</type>
+			</dependency>
+		</dependencies>
+	</location>
+
+	<!-- Additional Required Dependencies -->
+	<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true" label="Additional Dependencies" missingManifest="generate" type="Maven">
+		<dependencies>
+			<!-- javax.annotation for Jersey -->
+			<dependency>
+				<groupId>javax.annotation</groupId>
+				<artifactId>javax.annotation-api</artifactId>
+				<version>1.3.2</version>
+				<type>jar</type>
+			</dependency>
+
+			<!-- javax.activation for JAXB -->
+			<dependency>
+				<groupId>javax.activation</groupId>
+				<artifactId>javax.activation-api</artifactId>
+				<version>1.2.0</version>
 				<type>jar</type>
 			</dependency>
 		</dependencies>
