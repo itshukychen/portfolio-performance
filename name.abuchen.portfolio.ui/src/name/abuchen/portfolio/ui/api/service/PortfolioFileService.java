@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import name.abuchen.portfolio.ui.api.dto.AccountDto;
 import name.abuchen.portfolio.ui.api.dto.AssignmentDto;
 import name.abuchen.portfolio.ui.api.dto.ClassificationDto;
+import name.abuchen.portfolio.ui.api.dto.CurrencyConversionDto;
 import name.abuchen.portfolio.ui.api.dto.DashboardDto;
 import name.abuchen.portfolio.ui.api.dto.PortfolioDto;
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
@@ -45,6 +46,7 @@ import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.TransactionPair;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
+import name.abuchen.portfolio.money.ExchangeRate;
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.snapshot.PortfolioSnapshot;
@@ -269,6 +271,7 @@ public class PortfolioFileService {
         loadSecurities(fileInfo, client);
         loadTaxonomies(fileInfo, client);
         loadTransactions(fileInfo, client);
+        loadCurrencyConversions(fileInfo, client);
     }
     
     /**
@@ -475,7 +478,7 @@ public class PortfolioFileService {
      * @param fileInfo The file info to populate
      * @param client The loaded client
      */
-    private void loadAccounts(PortfolioFileInfo fileInfo, Client client) {
+    private void loadAccounts(PortfolioFileInfo fileInfo, Client client) {       
         List<AccountDto> accountDtos = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
         
@@ -773,6 +776,65 @@ public class PortfolioFileService {
         
         fileInfo.setTransactions(transactionDtos);
         logger.info("Set {} transactions in fileInfo", transactionDtos.size());
+    }
+    
+    /**
+     * Loads and converts currency conversion rates for today.
+     * Collects all unique currencies used in accounts and securities,
+     * and retrieves today's exchange rates to the base currency.
+     * 
+     * @param fileInfo The file info to populate
+     * @param client The loaded client
+     */
+    private void loadCurrencyConversions(PortfolioFileInfo fileInfo, Client client) {       
+        List<CurrencyConversionDto> conversionDtos = new ArrayList<>();
+        Set<String> currencies = new HashSet<>();
+        String baseCurrency = client.getBaseCurrency();
+        LocalDate today = LocalDate.now();
+        
+        // Collect currencies from accounts
+        for (name.abuchen.portfolio.model.Account account : client.getAccounts()) {
+            String currencyCode = account.getCurrencyCode();
+            if (currencyCode != null && !currencyCode.isEmpty() && !currencyCode.equals(baseCurrency)) {
+                currencies.add(currencyCode);
+            }
+        }
+        
+        // Collect currencies from securities
+        for (name.abuchen.portfolio.model.Security security : client.getSecurities()) {
+            String currencyCode = security.getCurrencyCode();
+            if (currencyCode != null && !currencyCode.isEmpty() && !currencyCode.equals(baseCurrency)) {
+                currencies.add(currencyCode);
+            }
+        }
+        
+        // Create currency converter
+        ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+        CurrencyConverter converter = new CurrencyConverterImpl(factory, baseCurrency);
+        
+        // Get exchange rates for each currency
+        for (String currency : currencies) {
+            try {
+                ExchangeRate rate = converter.getRate(today, currency);
+                
+                CurrencyConversionDto dto = new CurrencyConversionDto();
+                dto.setFromCurrency(currency);
+                dto.setToCurrency(baseCurrency);
+                dto.setRate(rate.getValue().doubleValue());
+                dto.setDate(rate.getTime());
+                
+                conversionDtos.add(dto);
+                logger.debug("Added currency conversion: {} to {} = {}", currency, baseCurrency, rate.getValue());
+            } catch (Exception e) {
+                logger.warn("Failed to get exchange rate for {} to {}: {}", currency, baseCurrency, e.getMessage());
+            }
+        }
+        
+        // Sort by currency code for consistent ordering
+        conversionDtos.sort((c1, c2) -> c1.getFromCurrency().compareTo(c2.getFromCurrency()));
+        
+        fileInfo.setCurrencyConversions(conversionDtos);
+        logger.info("Set {} currency conversions in fileInfo", conversionDtos.size());
     }
     
     /**

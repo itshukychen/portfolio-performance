@@ -66,6 +66,9 @@ public class ScheduledPriceUpdateService {
         running = true;
         logger.info("🕐 Starting scheduled price and exchange rate update service (interval: {} minutes)", UPDATE_INTERVAL_MINUTES);
         
+        // Load exchange rate providers from cache first (one-time operation)
+        ExchangeRateProviderLoader.ensureLoaded();
+        
         // Schedule the update task to run every 10 minutes with an initial delay of 10 minutes
         scheduler.scheduleAtFixedRate(
             this::updateAllPortfolioPrices,
@@ -130,10 +133,6 @@ public class ScheduledPriceUpdateService {
             }
             
             logger.info("Found {} portfolio(s) in cache", portfolioIds.size());
-            
-            // Initialize API keys before running updates
-            logger.info("Initializing API keys from preferences");
-            QuoteFeedApiKeyService.initializeApiKeys();
             
             // Update each portfolio
             int successCount = 0;
@@ -257,16 +256,23 @@ public class ScheduledPriceUpdateService {
             
             for (ExchangeRateProvider provider : providers) {
                 try {
-                    logger.info("   🌐 Updating from: {}", provider.getName());
+                    logger.info("   🌐 Updating from: {} [@{}]", 
+                                provider.getName(),
+                                Integer.toHexString(System.identityHashCode(provider)));
                     provider.update(monitor);
                     
                     // Save the updated data to cache file
                     provider.save(monitor);
-                    logger.info("   ✅ Updated and saved: {}", provider.getName());
+                    logger.info("   ✅ Updated and saved: {} [@{}]", 
+                                provider.getName(),
+                                Integer.toHexString(System.identityHashCode(provider)));
                     
                     successCount++;
                 } catch (IOException e) {
-                    logger.error("   ⚠️  Failed to update {}: {}", provider.getName(), e.getMessage());
+                    logger.error("   ⚠️  Failed to update {} [@{}]: {}", 
+                                 provider.getName(),
+                                 Integer.toHexString(System.identityHashCode(provider)),
+                                 e.getMessage());
                     failureCount++;
                 }
             }

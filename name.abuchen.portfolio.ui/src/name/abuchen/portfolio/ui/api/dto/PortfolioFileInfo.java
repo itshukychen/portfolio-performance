@@ -36,6 +36,7 @@ public class PortfolioFileInfo {
     private List<SecurityDto> securities;
     private List<TaxonomyDto> taxonomies;
     private List<TransactionDto> transactions;
+    private List<CurrencyConversionDto> currencyConversions;
     
     // Constructors
     public PortfolioFileInfo() {}
@@ -209,5 +210,13 @@ public class PortfolioFileInfo {
     
     public void setTransactions(List<TransactionDto> transactions) {
         this.transactions = transactions;
+    }
+    
+    public List<CurrencyConversionDto> getCurrencyConversions() {
+        return currencyConversions;
+    }
+    
+    public void setCurrencyConversions(List<CurrencyConversionDto> currencyConversions) {
+        this.currencyConversions = currencyConversions;
     }
 }

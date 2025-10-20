@@ -19,6 +19,7 @@ import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.impl.ECBExchangeRateProvider;
 import name.abuchen.portfolio.ui.api.PortfolioApiServer;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
+import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
 import name.abuchen.portfolio.ui.api.service.ScheduledPriceUpdateService;
 
 /**
@@ -312,6 +313,11 @@ public class ServerLauncher implements IApplication
             PortfolioLog.info("========================================");
             PortfolioLog.info("Starting unified scheduled update service...");
             PortfolioLog.info("========================================");
+            
+            // Initialize API keys from preferences once at startup
+            PortfolioLog.info("🔑 Initializing quote feed API keys from preferences...");
+            QuoteFeedApiKeyService.initializeApiKeys();
+            PortfolioLog.info("✅ API keys initialized");
             
             // Get the singleton PortfolioFileService instance
             // This ensures the scheduled service uses the same cache as the PortfolioController
