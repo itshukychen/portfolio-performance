@@ -19,7 +19,6 @@ import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.impl.ECBExchangeRateProvider;
 import name.abuchen.portfolio.ui.api.PortfolioApiServer;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
-import name.abuchen.portfolio.ui.api.service.ScheduledExchangeRateUpdateService;
 import name.abuchen.portfolio.ui.api.service.ScheduledPriceUpdateService;
 
 /**
@@ -37,7 +36,6 @@ public class ServerLauncher implements IApplication
     
     private PortfolioApiServer apiServer;
     private ScheduledPriceUpdateService scheduledPriceUpdateService;
-    private ScheduledExchangeRateUpdateService scheduledExchangeRateUpdateService;
     private volatile boolean running = true;
 
     @Override
@@ -71,11 +69,8 @@ public class ServerLauncher implements IApplication
                 apiServer.start(port);
                 PortfolioLog.info("✅ Server started successfully on port " + port);
                 
-                // Start the scheduled price update service
+                // Start the scheduled price and exchange rate update service
                 startScheduledPriceUpdateService();
-                
-                // Start the scheduled exchange rate update service
-                startScheduledExchangeRateUpdateService();
                 
                 PortfolioLog.info("📋 Press Ctrl+C to stop the server");
             }
@@ -114,16 +109,10 @@ public class ServerLauncher implements IApplication
         PortfolioLog.info("🛑 Stopping Portfolio Performance Server...");
         running = false;
         
-        // Stop the scheduled price update service
+        // Stop the scheduled price and exchange rate update service
         if (scheduledPriceUpdateService != null)
         {
             scheduledPriceUpdateService.stop();
-        }
-        
-        // Stop the scheduled exchange rate update service
-        if (scheduledExchangeRateUpdateService != null)
-        {
-            scheduledExchangeRateUpdateService.stop();
         }
         
         // Save exchange rates before shutdown
@@ -313,15 +302,15 @@ public class ServerLauncher implements IApplication
     }
     
     /**
-     * Start the scheduled price update service.
-     * This service will automatically update prices for all loaded portfolios every 10 minutes.
+     * Start the scheduled price and exchange rate update service.
+     * This service will automatically update exchange rates and prices for all loaded portfolios every 10 minutes.
      */
     private void startScheduledPriceUpdateService()
     {
         try
         {
             PortfolioLog.info("========================================");
-            PortfolioLog.info("Starting scheduled price update service...");
+            PortfolioLog.info("Starting unified scheduled update service...");
             PortfolioLog.info("========================================");
             
             // Get the singleton PortfolioFileService instance
@@ -331,39 +320,16 @@ public class ServerLauncher implements IApplication
             scheduledPriceUpdateService = new ScheduledPriceUpdateService(portfolioFileService);
             scheduledPriceUpdateService.start();
             
-            PortfolioLog.info("✅ Scheduled price update service started");
-            PortfolioLog.info("   Prices will be updated every 10 minutes for all loaded portfolios");
+            PortfolioLog.info("✅ Scheduled update service started");
+            PortfolioLog.info("   Updates every 10 minutes:");
+            PortfolioLog.info("   • Exchange rates from online sources");
+            PortfolioLog.info("   • Security prices for all loaded portfolios");
+            PortfolioLog.info("   • lastPriceUpdateTime property on all portfolios");
             PortfolioLog.info("========================================");
         }
         catch (Exception e)
         {
-            PortfolioLog.error("❌ Failed to start scheduled price update service: " + e.getMessage());
-            PortfolioLog.error(e);
-        }
-    }
-    
-    /**
-     * Start the scheduled exchange rate update service.
-     * This service will automatically update exchange rates every 10 minutes.
-     */
-    private void startScheduledExchangeRateUpdateService()
-    {
-        try
-        {
-            PortfolioLog.info("========================================");
-            PortfolioLog.info("Starting scheduled exchange rate update service...");
-            PortfolioLog.info("========================================");
-            
-            scheduledExchangeRateUpdateService = new ScheduledExchangeRateUpdateService();
-            scheduledExchangeRateUpdateService.start();
-            
-            PortfolioLog.info("✅ Scheduled exchange rate update service started");
-            PortfolioLog.info("   Exchange rates will be updated every 10 minutes");
-            PortfolioLog.info("========================================");
-        }
-        catch (Exception e)
-        {
-            PortfolioLog.error("❌ Failed to start scheduled exchange rate update service: " + e.getMessage());
+            PortfolioLog.error("❌ Failed to start scheduled update service: " + e.getMessage());
             PortfolioLog.error(e);
         }
     }

@@ -1,24 +1,32 @@
 package name.abuchen.portfolio.ui.api.service;
 
+import java.io.IOException;
+import java.time.Instant;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.jobs.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.Security;
+import name.abuchen.portfolio.money.ExchangeRateProvider;
+import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.ui.jobs.priceupdate.UpdatePricesJob;
 
 /**
- * Service that automatically updates prices for all loaded portfolios on a scheduled basis.
- * This service runs every 10 minutes and updates both latest and historic quotes for all
- * active (non-retired) securities in cached portfolios.
+ * Service that automatically updates prices and exchange rates on a scheduled basis.
+ * This service runs every 10 minutes and performs the following operations:
+ * 1. Updates exchange rates from online sources
+ * 2. Updates both latest and historic quotes for all active (non-retired) securities in cached portfolios
+ * 3. Sets the lastPriceUpdateTime property on all updated portfolios
  */
 public class ScheduledPriceUpdateService {
     
@@ -46,8 +54,8 @@ public class ScheduledPriceUpdateService {
     }
     
     /**
-     * Start the scheduled price update service.
-     * The service will update prices every 10 minutes for all cached portfolios.
+     * Start the scheduled price and exchange rate update service.
+     * The service will update exchange rates and prices every 10 minutes for all cached portfolios.
      */
     public void start() {
         if (running) {
@@ -56,7 +64,7 @@ public class ScheduledPriceUpdateService {
         }
         
         running = true;
-        logger.info("🕐 Starting scheduled price update service (interval: {} minutes)", UPDATE_INTERVAL_MINUTES);
+        logger.info("🕐 Starting scheduled price and exchange rate update service (interval: {} minutes)", UPDATE_INTERVAL_MINUTES);
         
         // Schedule the update task to run every 10 minutes with an initial delay of 10 minutes
         scheduler.scheduleAtFixedRate(
@@ -66,7 +74,7 @@ public class ScheduledPriceUpdateService {
             TimeUnit.MINUTES
         );
         
-        logger.info("✅ Scheduled price update service started successfully");
+        logger.info("✅ Scheduled price and exchange rate update service started successfully");
     }
     
     /**
@@ -96,14 +104,21 @@ public class ScheduledPriceUpdateService {
     }
     
     /**
-     * Update prices for all portfolios currently in the cache.
+     * Update exchange rates and prices for all portfolios currently in the cache.
      * This method is called periodically by the scheduler.
      */
     private void updateAllPortfolioPrices() {
         try {
             logger.info("========================================");
-            logger.info("📊 Starting scheduled price update");
+            logger.info("📊 Starting scheduled update (exchange rates + prices)");
             logger.info("========================================");
+            
+            // Step 1: Update exchange rates first (global operation)
+            logger.info("Step 1/2: Updating exchange rates...");
+            updateExchangeRates();
+            
+            // Step 2: Update prices for all cached portfolios
+            logger.info("Step 2/2: Updating security prices...");
             
             // Get the IDs of all cached portfolios
             Set<String> portfolioIds = portfolioFileService.getCachedPortfolioIds();
@@ -135,7 +150,7 @@ public class ScheduledPriceUpdateService {
             }
             
             logger.info("========================================");
-            logger.info("✅ Scheduled price update completed");
+            logger.info("✅ Scheduled update completed");
             logger.info("   Portfolios updated: {}", successCount);
             if (failureCount > 0) {
                 logger.info("   Portfolios failed: {}", failureCount);
@@ -143,8 +158,25 @@ public class ScheduledPriceUpdateService {
             logger.info("========================================");
             
         } catch (Exception e) {
-            logger.error("Error in scheduled price update task", e);
+            logger.error("Error in scheduled update task", e);
         }
+    }
+    
+    /**
+     * Update exchange rates and prices for a specific portfolio.
+     * This is a public method that can be called by the REST API or scheduled tasks.
+     * 
+     * @param portfolioId The portfolio ID
+     * @throws Exception if the update fails
+     */
+    public void updatePortfolioPricesAndExchangeRates(String portfolioId) throws Exception {
+        logger.info("Updating exchange rates and prices for portfolio: {}", portfolioId);
+        
+        // Step 1: Update exchange rates first (global operation)
+        updateExchangeRates();
+        
+        // Step 2: Update portfolio prices
+        updatePortfolioPrices(portfolioId);
     }
     
     /**
@@ -191,10 +223,59 @@ public class ScheduledPriceUpdateService {
         
         logger.info("   Price update job completed. Saving portfolio file...");
         
+        // Set the lastPriceUpdateTime property on the client
+        String updateTimestamp = Instant.now().toString();
+        client.setProperty("lastPriceUpdateTime", updateTimestamp);
+        logger.info("   Set lastPriceUpdateTime to: {}", updateTimestamp);
+        
         // Save the portfolio file after the update
         portfolioFileService.saveFile(portfolioId);
         
         logger.info("   ✅ Portfolio file saved successfully");
+    }
+    
+    /**
+     * Update exchange rates from online sources.
+     * This updates exchange rates globally before updating portfolio prices.
+     */
+    private void updateExchangeRates() {
+        try {
+            logger.info("💱 Updating exchange rates from online sources...");
+            
+            List<ExchangeRateProvider> providers = ExchangeRateProviderFactory.getProviders();
+            
+            if (providers.isEmpty()) {
+                logger.warn("No exchange rate providers found, skipping exchange rate update");
+                return;
+            }
+            
+            logger.info("Found {} exchange rate provider(s)", providers.size());
+            
+            NullProgressMonitor monitor = new NullProgressMonitor();
+            int successCount = 0;
+            int failureCount = 0;
+            
+            for (ExchangeRateProvider provider : providers) {
+                try {
+                    logger.info("   🌐 Updating from: {}", provider.getName());
+                    provider.update(monitor);
+                    
+                    // Save the updated data to cache file
+                    provider.save(monitor);
+                    logger.info("   ✅ Updated and saved: {}", provider.getName());
+                    
+                    successCount++;
+                } catch (IOException e) {
+                    logger.error("   ⚠️  Failed to update {}: {}", provider.getName(), e.getMessage());
+                    failureCount++;
+                }
+            }
+            
+            logger.info("Exchange rate update completed: {} succeeded, {} failed", successCount, failureCount);
+            
+        } catch (Exception e) {
+            logger.error("Error updating exchange rates: {}", e.getMessage(), e);
+        }
     }
     
     /**

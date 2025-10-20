@@ -20,6 +20,7 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.jobs.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +30,7 @@ import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.dto.ValueDataPointDto;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
 import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
-import name.abuchen.portfolio.ui.api.service.ScheduledExchangeRateUpdateService;
+import name.abuchen.portfolio.ui.api.service.ScheduledPriceUpdateService;
 import name.abuchen.portfolio.ui.api.service.WidgetDataService;
 import name.abuchen.portfolio.ui.jobs.priceupdate.UpdatePricesJob;
 import name.abuchen.portfolio.model.Account;
@@ -42,12 +43,14 @@ import name.abuchen.portfolio.model.Security;
 import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
+import name.abuchen.portfolio.money.ExchangeRateProvider;
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.snapshot.AccountSnapshot;
 import name.abuchen.portfolio.snapshot.PortfolioSnapshot;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
@@ -65,7 +68,7 @@ public class PortfolioController {
     // Use static singleton to ensure cache is shared across all API calls
     private static final PortfolioFileService portfolioFileService = PortfolioFileService.getInstance();
     private static final WidgetDataService widgetDataService = new WidgetDataService();
-    private static final ScheduledExchangeRateUpdateService exchangeRateUpdateService = new ScheduledExchangeRateUpdateService();
+    private static final ScheduledPriceUpdateService priceUpdateService = new ScheduledPriceUpdateService(portfolioFileService);
     
     /**
      * Helper method to create error responses with consistent structure.
@@ -324,7 +327,7 @@ public class PortfolioController {
     @Produces(MediaType.APPLICATION_JSON)
     public Response updatePrices(@PathParam("portfolioId") String portfolioId) {
         try {
-            logger.info("Updating prices for portfolio: " + portfolioId);
+            logger.info("Manual price update requested for portfolio: " + portfolioId);
             
             // Get the cached Client for this portfolio
             Client client = portfolioFileService.getPortfolio(portfolioId);
@@ -342,31 +345,11 @@ public class PortfolioController {
             logger.info("Initializing API keys from preferences");
             QuoteFeedApiKeyService.initializeApiKeys();
             
-            // Create predicate to filter only active (non-retired) securities
-            Predicate<Security> onlyActive = s -> !s.isRetired()
-                     && (s.getTickerSymbol() == null || !s.getTickerSymbol().replaceAll("\\s+", "").matches(".*\\d{6}[CP]\\d{8}"));
+            // Use the shared update logic from ScheduledPriceUpdateService
+            // This updates exchange rates, prices, and sets lastPriceUpdateTime
+            priceUpdateService.updatePortfolioPricesAndExchangeRates(portfolioId);
             
-            // Create and schedule the update quotes job with both LATEST and HISTORIC targets
-            Job updateJob = new UpdatePricesJob(client, onlyActive,
-                            EnumSet.of(UpdatePricesJob.Target.LATEST, UpdatePricesJob.Target.HISTORIC));
-            updateJob.schedule();
-            
-            logger.info("Waiting for price update job to complete...");
-            
-            // Wait for the job to complete
-            updateJob.join();
-            
-            logger.info("Price update job completed. Now updating exchange rates...");
-            
-            // Update exchange rates (like the scheduled job does)
-            exchangeRateUpdateService.updateExchangeRates();
-            
-            logger.info("Exchange rates updated. Saving portfolio file...");
-            
-            // Save the portfolio file after the update
-            portfolioFileService.saveFile(portfolioId);
-            
-            logger.info("Portfolio file saved successfully");
+            logger.info("Price and exchange rate update completed successfully");
             
             // Get the updated portfolio info with full client data from cache
             PortfolioFileInfo fileInfo = portfolioFileService.getFullPortfolioInfo(portfolioId);
@@ -381,6 +364,58 @@ public class PortfolioController {
                 e.getMessage());
         } catch (Exception e) {
             logger.error("Unexpected error updating prices for portfolio " + portfolioId + ": " + e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
+    }
+    
+    /**
+     * Get the last price update timestamp for a portfolio.
+     * 
+     * This endpoint returns the timestamp of the last time prices were updated,
+     * either through the scheduled update service or manual update.
+     * 
+     * @param portfolioId The portfolio ID
+     * @return Response containing the last price update timestamp
+     */
+    @GET
+    @Path("/{portfolioId}/lastPriceUpdateTime")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getLastPriceUpdateTime(@PathParam("portfolioId") String portfolioId) {
+        try {
+            logger.info("Getting last price update time for portfolio: " + portfolioId);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: " + portfolioId);
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
+                    "Portfolio must be opened first before accessing last price update time");
+            }
+            
+            // Get the lastPriceUpdateTime property
+            String lastUpdateTime = client.getProperty("lastPriceUpdateTime");
+            
+            // Create response
+            Map<String, Object> response = new HashMap<>();
+            response.put("portfolioId", portfolioId);
+            
+            if (lastUpdateTime != null && !lastUpdateTime.isEmpty()) {
+                response.put("lastPriceUpdateTime", lastUpdateTime);
+                response.put("hasBeenUpdated", true);
+            } else {
+                response.put("lastPriceUpdateTime", null);
+                response.put("hasBeenUpdated", false);
+                response.put("message", "Prices have not been updated yet");
+            }
+            
+            return Response.ok(response).build();
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error getting last price update time for portfolio " + portfolioId + ": " + e.getMessage(), e);
             return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
                 "Internal server error", 
                 e.getMessage());
