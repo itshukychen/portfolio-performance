@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import name.abuchen.portfolio.ui.api.dto.EarningsTransactionDto;
+import name.abuchen.portfolio.ui.api.dto.OptionTransactionDto;
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.dto.ValueDataPointDto;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
@@ -52,6 +53,7 @@ import name.abuchen.portfolio.snapshot.PortfolioSnapshot;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 /**
@@ -824,13 +826,125 @@ public class PortfolioController {
     }
     
     /**
+     * Helper method to parse option security name
+     * Format: "SPXW 13OCT25 6025 P" or variations
+     */
+    private void parseOptionSecurity(String securityName, OptionTransactionDto dto) {
+        if (securityName == null || securityName.trim().isEmpty()) {
+            return;
+        }
+        
+        try {
+            // Parse format: "SPXW 13OCT25 6025 P"
+            String[] parts = securityName.trim().split("\\s+");
+            
+            if (parts.length >= 4) {
+                // Parse underlying security name (remove W suffix if present)
+                String underlying = parts[0];
+                if (underlying.endsWith("W")) {
+                    underlying = underlying.substring(0, underlying.length() - 1);
+                }
+                dto.setUnderlyingSecurityName(underlying);
+                
+                // Parse expiration date
+                dto.setExpirationDate(parts[1]);
+                dto.setParsedExpirationDate(parseExpirationDate(parts[1]));
+                
+                // Parse strike price
+                try {
+                    dto.setStrikePrice(Double.parseDouble(parts[2]));
+                } catch (NumberFormatException e) {
+                    logger.warn("Could not parse strike price: {}", parts[2]);
+                }
+                
+                // Parse option type (P or C)
+                dto.setOptionType(parts[3]);
+            }
+        } catch (Exception e) {
+            logger.warn("Could not parse option security name: {}", securityName, e);
+        }
+    }
+    
+    /**
+     * Helper method to parse expiration date from format like "13OCT25"
+     */
+    private LocalDate parseExpirationDate(String expirationStr) {
+        try {
+            // Format: DDMMMYY (e.g., "13OCT25")
+            String day = expirationStr.substring(0, 2);
+            String month = expirationStr.substring(2, 5);
+            String year = expirationStr.substring(5, 7);
+            
+            // Convert month abbreviation to number
+            int monthNum = switch (month.toUpperCase()) {
+                case "JAN" -> 1;
+                case "FEB" -> 2;
+                case "MAR" -> 3;
+                case "APR" -> 4;
+                case "MAY" -> 5;
+                case "JUN" -> 6;
+                case "JUL" -> 7;
+                case "AUG" -> 8;
+                case "SEP" -> 9;
+                case "OCT" -> 10;
+                case "NOV" -> 11;
+                case "DEC" -> 12;
+                default -> throw new IllegalArgumentException("Invalid month: " + month);
+            };
+            
+            // Assume 20xx for years
+            int fullYear = 2000 + Integer.parseInt(year);
+            
+            return LocalDate.of(fullYear, monthNum, Integer.parseInt(day));
+        } catch (Exception e) {
+            logger.warn("Could not parse expiration date: {}", expirationStr, e);
+            return null;
+        }
+    }
+    
+    /**
+     * Helper method to find the underlying security price at a specific date
+     */
+    private Double findUnderlyingSecurityPrice(Client client, String underlyingSecurityName, LocalDateTime transactionTime) {
+        if (underlyingSecurityName == null || client == null) {
+            return null;
+        }
+        
+        try {
+            // Find the underlying security by name (e.g., SPX)
+            Security underlyingSecurity = client.getSecurities().stream()
+                .filter(s -> s.getName() != null && s.getName().equalsIgnoreCase(underlyingSecurityName))
+                .findFirst()
+                .orElse(null);
+            
+            if (underlyingSecurity == null) {
+                logger.debug("Could not find underlying security with name: {}", underlyingSecurityName);
+                return null;
+            }
+            
+            // Get the price at or before the transaction date
+            LocalDate txDate = transactionTime.toLocalDate();
+            SecurityPrice priceAtDate = underlyingSecurity.getSecurityPrice(txDate);
+            
+            if (priceAtDate != null) {
+                return priceAtDate.getValue() / (double) Values.Quote.divider();
+            }
+            
+        } catch (Exception e) {
+            logger.warn("Error finding underlying security price for {}: {}", underlyingSecurityName, e.getMessage());
+        }
+        
+        return null;
+    }
+    
+    /**
      * Get options earnings for a given period.
      * 
      * This endpoint returns all options-related transactions (security sells with options ticker patterns
      * and option-related fees) within a specified date range.
      * 
-     * Options are identified by ticker symbols matching the pattern: .*\d{6}[CP]\d{8}
-     * (e.g., 6 digits for date, C/P for Call/Put, 8 digits for strike price)
+     * Options are identified by security names matching the pattern like "SPXW 13OCT25 6025 P"
+     * where the security name contains expiration date, strike price, and option type (Put/Call).
      * 
      * Additionally, fee transactions with the comment "EXPOSURE FEE" are included as options-related fees.
      * 
@@ -879,13 +993,13 @@ public class PortfolioController {
             CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
             
             // Collect all options earnings transactions
-            List<EarningsTransactionDto> optionsEarnings = new ArrayList<>();
+            List<OptionTransactionDto> optionsEarnings = new ArrayList<>();
             
-            // 1. Collect security SELL transactions with options ticker pattern
+            // 1. Collect security SELL and BUY transactions with options pattern
             for (Portfolio portfolio : client.getPortfolios()) {
                 for (PortfolioTransaction tx : portfolio.getTransactions()) {
-                    // Filter by type - only SELL transactions
-                    if (tx.getType() != PortfolioTransaction.Type.SELL) {
+                    // Filter by type - only SELL and BUY transactions
+                    if (tx.getType() != PortfolioTransaction.Type.SELL && tx.getType() != PortfolioTransaction.Type.BUY) {
                         continue;
                     }
                     
@@ -895,70 +1009,111 @@ public class PortfolioController {
                         continue;
                     }
                     
-                    // Check if security has options ticker pattern
+                    // Check if security has options name pattern
                     Security security = tx.getSecurity();
-                    if (security == null || security.getTickerSymbol() == null) {
+                    if (security == null || security.getName() == null) {
                         continue;
                     }
                     
-                    String ticker = security.getTickerSymbol().replaceAll("\\s+", "");
-                    if (!ticker.matches(".*\\d{6}[CP]\\d{8}")) {
+                    // Check if this looks like an option (has the pattern like "SPXW 13OCT25 6025 P")
+                    String securityName = security.getName().trim();
+                    String[] parts = securityName.split("\\s+");
+                    
+                    // Need at least 4 parts: underlying, expiration, strike, type
+                    if (parts.length < 4) {
+                        continue;
+                    }
+                    
+                    // Check if third part is a number (strike price) and fourth is P or C
+                    try {
+                        Double.parseDouble(parts[2]);
+                        if (!parts[3].equals("P") && !parts[3].equals("C")) {
+                            continue;
+                        }
+                    } catch (NumberFormatException e) {
                         continue;
                     }
                     
                     // This is an options transaction - create DTO
-                    EarningsTransactionDto dto = new EarningsTransactionDto();
+                    OptionTransactionDto dto = new OptionTransactionDto();
                     dto.setUuid(tx.getUUID());
-                    dto.setDateTime(tx.getDateTime());
-                    dto.setType("OPTIONS_SELL");
+                    dto.setTransactionTime(tx.getDateTime());
+                    dto.setType(tx.getType().toString()); // "SELL" or "BUY"
                     dto.setCurrencyCode(tx.getCurrencyCode());
                     
-                    // Original currency amounts
-                    // For SELL transactions, the amount is what we receive
-                    double amount = tx.getAmount() / Values.Amount.divider();
+                    // Calculate number of contracts (shares / 100)
+                    // Values.Share.factor() = 100,000,000 (precision 8)
+                    // So if shares = 1,000,000,000 (for 10 shares), we need: 1,000,000,000 / 100,000,000 / 100 = 0.1
+                    // Correct calculation: shares / Values.Share.factor() gives actual shares, then divide by 100
+                    long sharesRaw = tx.getShares();
+                    double actualShares = sharesRaw / (double) Values.Share.factor();
+                    int numberOfContracts = (int) Math.round(actualShares / 100.0);
+                    dto.setNumberOfContracts(numberOfContracts);
                     
-                    Money taxesMoney = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.TAX);
+                    // Calculate price per contract with proper precision handling
+                    // Get gross value in dollars (Values.Amount.factor() = 100)
+                    double grossValue = tx.getGrossValueAmount() / Values.Amount.divider();
+                    // Get actual number of shares
+                    double sharesCount = sharesRaw / (double) Values.Share.factor();
+                    // Price per share
+                    double pricePerShare = sharesCount != 0 ? grossValue / sharesCount : 0;
+                    // Price per contract (100 shares)
+                    double pricePerContract = pricePerShare * 100;
+                    dto.setPricePerContract(pricePerContract);
+                    
+                    // Get fees
                     Money feesMoney = tx.getUnitSum(name.abuchen.portfolio.model.Transaction.Unit.Type.FEE);
-                    
-                    double taxes = taxesMoney.getAmount() / Values.Amount.divider();
                     double fees = feesMoney.getAmount() / Values.Amount.divider();
-                    
-                    // Calculate gross value (amount + taxes + fees)
-                    double grossValue = amount + taxes + fees;
-                    
-                    dto.setAmount(amount);
-                    dto.setGrossValue(grossValue);
-                    dto.setTaxes(taxes);
                     dto.setFees(fees);
                     
-                    // Converted amounts in base currency
-                    dto.setBaseCurrency(client.getBaseCurrency());
+                    // Calculate total amount (for SELL: received, for BUY: paid)
+                    double totalAmount = tx.getAmount() / Values.Amount.divider();
+                    // For BUY transactions, make the amount negative to indicate money spent
+                    if (tx.getType() == PortfolioTransaction.Type.BUY) {
+                        totalAmount = -totalAmount;
+                    }
+                    dto.setTotalAmount(totalAmount);
                     
-                    Money amountMoney = Money.of(tx.getCurrencyCode(), tx.getAmount()).with(converter.at(tx.getDateTime()));
-                    dto.setAmountInBaseCurrency(amountMoney.getAmount() / Values.Amount.divider());
+                    // Parse option security name
+                    dto.setOriginalSecurityName(securityName);
+                    parseOptionSecurity(securityName, dto);
                     
-                    Money grossValueMoney = Money.of(tx.getCurrencyCode(), 
-                        (long)(grossValue * Values.Amount.divider())).with(converter.at(tx.getDateTime()));
-                    dto.setGrossValueInBaseCurrency(grossValueMoney.getAmount() / Values.Amount.divider());
-                    
-                    Money taxesConverted = taxesMoney.with(converter.at(tx.getDateTime()));
-                    dto.setTaxesInBaseCurrency(taxesConverted.getAmount() / Values.Amount.divider());
-                    
-                    Money feesConverted = feesMoney.with(converter.at(tx.getDateTime()));
-                    dto.setFeesInBaseCurrency(feesConverted.getAmount() / Values.Amount.divider());
+                    // Find underlying security price at transaction time
+                    if (dto.getUnderlyingSecurityName() != null) {
+                        Double underlyingPrice = findUnderlyingSecurityPrice(client, dto.getUnderlyingSecurityName(), tx.getDateTime());
+                        dto.setUnderlyingSecurityPrice(underlyingPrice);
+                        dto.setUnderlyingSecurityCurrency(tx.getCurrencyCode());
+                    }
                     
                     // Add security information
                     dto.setSecurityUuid(security.getUUID());
-                    dto.setSecurityName(security.getName());
                     dto.setSecurityIsin(security.getIsin());
                     
-                    // Add portfolio information (note: portfolio.getAccount() may be null)
+                    // Add portfolio information
                     if (portfolio.getReferenceAccount() != null) {
                         dto.setAccountUuid(portfolio.getReferenceAccount().getUUID());
                         dto.setAccountName(portfolio.getReferenceAccount().getName());
                     }
                     dto.setNote(tx.getNote());
                     dto.setSource(tx.getSource());
+                    
+                    // Converted amounts in base currency
+                    dto.setBaseCurrency(client.getBaseCurrency());
+                    
+                    Money totalAmountMoney = Money.of(tx.getCurrencyCode(), tx.getAmount()).with(converter.at(tx.getDateTime()));
+                    double convertedTotal = totalAmountMoney.getAmount() / Values.Amount.divider();
+                    // For BUY transactions, make negative
+                    if (tx.getType() == PortfolioTransaction.Type.BUY) {
+                        convertedTotal = -convertedTotal;
+                    }
+                    dto.setTotalAmountInBaseCurrency(convertedTotal);
+                    
+                    Money feesConverted = feesMoney.with(converter.at(tx.getDateTime()));
+                    dto.setFeesInBaseCurrency(feesConverted.getAmount() / Values.Amount.divider());
+                    
+                    Money pricePerContractMoney = Money.of(tx.getCurrencyCode(), 
+                        (long)(pricePerContract * Values.Amount.divider())).with(converter.at(tx.getDateTime()));
+                    dto.setPricePerContractInBaseCurrency(pricePerContractMoney.getAmount() / Values.Amount.divider());
                     
                     optionsEarnings.add(dto);
                 }
@@ -984,35 +1139,38 @@ public class PortfolioController {
                     }
                     
                     // This is an options-related fee - create DTO
-                    EarningsTransactionDto dto = new EarningsTransactionDto();
+                    OptionTransactionDto dto = new OptionTransactionDto();
                     dto.setUuid(tx.getUUID());
-                    dto.setDateTime(tx.getDateTime());
+                    dto.setTransactionTime(tx.getDateTime());
                     dto.setType("EXPOSURE_FEE");
                     dto.setCurrencyCode(tx.getCurrencyCode());
                     
                     // For fee transactions, the amount is negative (debit)
                     double amount = -(tx.getAmount() / Values.Amount.divider());
+                    double feeAmount = Math.abs(amount);
                     
-                    dto.setAmount(amount);
-                    dto.setGrossValue(amount); // For fees, gross value equals amount
-                    dto.setTaxes(0.0);
-                    dto.setFees(Math.abs(amount)); // The fee itself
+                    dto.setNumberOfContracts(0);
+                    dto.setPricePerContract(0.0);
+                    dto.setFees(feeAmount);
+                    dto.setTotalAmount(amount);
                     
                     // Converted amounts in base currency
                     dto.setBaseCurrency(client.getBaseCurrency());
                     
                     Money amountMoney = tx.getMonetaryAmount().with(converter.at(tx.getDateTime()));
                     double convertedAmount = -(amountMoney.getAmount() / Values.Amount.divider());
-                    dto.setAmountInBaseCurrency(convertedAmount);
-                    dto.setGrossValueInBaseCurrency(convertedAmount);
-                    dto.setTaxesInBaseCurrency(0.0);
+                    dto.setTotalAmountInBaseCurrency(convertedAmount);
                     dto.setFeesInBaseCurrency(Math.abs(convertedAmount));
+                    dto.setPricePerContractInBaseCurrency(0.0);
                     
                     // Add security information if available
                     if (tx.getSecurity() != null) {
                         dto.setSecurityUuid(tx.getSecurity().getUUID());
-                        dto.setSecurityName(tx.getSecurity().getName());
+                        dto.setOriginalSecurityName(tx.getSecurity().getName());
                         dto.setSecurityIsin(tx.getSecurity().getIsin());
+                        
+                        // Try to parse option details if available
+                        parseOptionSecurity(tx.getSecurity().getName(), dto);
                     }
                     
                     // Add account information
@@ -1026,20 +1184,17 @@ public class PortfolioController {
             }
             
             // Sort by date (most recent first)
-            optionsEarnings.sort((a, b) -> b.getDateTime().compareTo(a.getDateTime()));
+            optionsEarnings.sort((a, b) -> b.getTransactionTime().compareTo(a.getTransactionTime()));
             
-            // Calculate totals in base currency (for consistent aggregation across currencies)
+            // Calculate totals in base currency
             double totalAmountInBaseCurrency = optionsEarnings.stream()
-                .mapToDouble(EarningsTransactionDto::getAmountInBaseCurrency)
-                .sum();
-            double totalGrossValueInBaseCurrency = optionsEarnings.stream()
-                .mapToDouble(EarningsTransactionDto::getGrossValueInBaseCurrency)
-                .sum();
-            double totalTaxesInBaseCurrency = optionsEarnings.stream()
-                .mapToDouble(EarningsTransactionDto::getTaxesInBaseCurrency)
+                .mapToDouble(OptionTransactionDto::getTotalAmountInBaseCurrency)
                 .sum();
             double totalFeesInBaseCurrency = optionsEarnings.stream()
-                .mapToDouble(EarningsTransactionDto::getFeesInBaseCurrency)
+                .mapToDouble(OptionTransactionDto::getFeesInBaseCurrency)
+                .sum();
+            int totalContracts = optionsEarnings.stream()
+                .mapToInt(OptionTransactionDto::getNumberOfContracts)
                 .sum();
             
             // Create response
@@ -1050,14 +1205,13 @@ public class PortfolioController {
             response.put("count", optionsEarnings.size());
             response.put("baseCurrency", client.getBaseCurrency());
             response.put("totalAmountInBaseCurrency", totalAmountInBaseCurrency);
-            response.put("totalGrossValueInBaseCurrency", totalGrossValueInBaseCurrency);
-            response.put("totalTaxesInBaseCurrency", totalTaxesInBaseCurrency);
             response.put("totalFeesInBaseCurrency", totalFeesInBaseCurrency);
+            response.put("totalContracts", totalContracts);
             response.put("optionsEarnings", optionsEarnings);
             response.put("timezone", ZoneId.systemDefault().getId());
             
-            logger.info("Returning {} options earnings transactions for portfolio {} (total in base currency: {}, gross: {})", 
-                optionsEarnings.size(), portfolioId, totalAmountInBaseCurrency, totalGrossValueInBaseCurrency);
+            logger.info("Returning {} options transactions for portfolio {} (total in base currency: {}, total contracts: {})", 
+                optionsEarnings.size(), portfolioId, totalAmountInBaseCurrency, totalContracts);
             
             return Response.ok(response).build();
             
