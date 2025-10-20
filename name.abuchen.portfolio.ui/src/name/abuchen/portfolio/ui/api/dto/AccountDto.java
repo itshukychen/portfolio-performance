@@ -15,6 +15,7 @@ public class AccountDto {
     private boolean isRetired;
     private int transactionsCount;
     private double currentValue;
+    private double currentValueInBaseCurrency;
     private Instant updatedAt;
     
     // Constructors
@@ -80,6 +81,14 @@ public class AccountDto {
     
     public void setCurrentValue(double currentValue) {
         this.currentValue = currentValue;
+    }
+    
+    public double getCurrentValueInBaseCurrency() {
+        return currentValueInBaseCurrency;
+    }
+    
+    public void setCurrentValueInBaseCurrency(double currentValueInBaseCurrency) {
+        this.currentValueInBaseCurrency = currentValueInBaseCurrency;
     }
     
     public Instant getUpdatedAt() {

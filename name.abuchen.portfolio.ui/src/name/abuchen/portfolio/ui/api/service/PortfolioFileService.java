@@ -451,7 +451,7 @@ public class PortfolioFileService {
                 dto.setReferenceAccountName(portfolio.getReferenceAccount().getName());
             }
             
-            // Calculate current value
+            // Calculate current value (already in base currency)
             try {
                 PortfolioSnapshot snapshot = PortfolioSnapshot.create(portfolio, converter, today);
                 Money value = snapshot.getValue();
@@ -479,6 +479,10 @@ public class PortfolioFileService {
         List<AccountDto> accountDtos = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
         
+        // Create currency converter for account valuations in base currency
+        ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+        CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+        
         for (name.abuchen.portfolio.model.Account account : client.getAccounts()) {
             AccountDto dto = new AccountDto();
             dto.setUuid(account.getUUID());
@@ -494,9 +498,15 @@ public class PortfolioFileService {
                 long currentAmount = account.getCurrentAmount(now);
                 // Convert from internal representation (multiplied by 100) to decimal
                 dto.setCurrentValue(currentAmount / 100.0);
+                
+                // Convert to base currency
+                Money accountMoney = Money.of(account.getCurrencyCode(), currentAmount);
+                Money convertedMoney = accountMoney.with(converter.at(LocalDate.now()));
+                dto.setCurrentValueInBaseCurrency(convertedMoney.getAmount() / 100.0);
             } catch (Exception e) {
                 logger.warn("Failed to calculate account balance for {}: {}", account.getName(), e.getMessage());
                 dto.setCurrentValue(0.0);
+                dto.setCurrentValueInBaseCurrency(0.0);
             }
             
             accountDtos.add(dto);
