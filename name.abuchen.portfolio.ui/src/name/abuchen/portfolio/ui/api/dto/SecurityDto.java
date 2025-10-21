@@ -24,6 +24,15 @@ public class SecurityDto {
     private int pricesCount;
     private Instant updatedAt;
     
+    // Holdings information
+    private Long sharesHeld;
+    private Double avgPricePerShare;
+    private Long totalHoldingValueSecurityCurrency;
+    private Long totalHoldingValueBaseCurrency;
+    private Long unrealizedGainsYTD;
+    private Long unrealizedGainsDaily;
+    private Long totalEarnings;
+    
     // Constructors
     public SecurityDto() {}
     
@@ -151,6 +160,62 @@ public class SecurityDto {
     
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+    
+    public Long getSharesHeld() {
+        return sharesHeld;
+    }
+    
+    public void setSharesHeld(Long sharesHeld) {
+        this.sharesHeld = sharesHeld;
+    }
+    
+    public Double getAvgPricePerShare() {
+        return avgPricePerShare;
+    }
+    
+    public void setAvgPricePerShare(Double avgPricePerShare) {
+        this.avgPricePerShare = avgPricePerShare;
+    }
+    
+    public Long getTotalHoldingValueSecurityCurrency() {
+        return totalHoldingValueSecurityCurrency;
+    }
+    
+    public void setTotalHoldingValueSecurityCurrency(Long totalHoldingValueSecurityCurrency) {
+        this.totalHoldingValueSecurityCurrency = totalHoldingValueSecurityCurrency;
+    }
+    
+    public Long getTotalHoldingValueBaseCurrency() {
+        return totalHoldingValueBaseCurrency;
+    }
+    
+    public void setTotalHoldingValueBaseCurrency(Long totalHoldingValueBaseCurrency) {
+        this.totalHoldingValueBaseCurrency = totalHoldingValueBaseCurrency;
+    }
+    
+    public Long getUnrealizedGainsYTD() {
+        return unrealizedGainsYTD;
+    }
+    
+    public void setUnrealizedGainsYTD(Long unrealizedGainsYTD) {
+        this.unrealizedGainsYTD = unrealizedGainsYTD;
+    }
+    
+    public Long getUnrealizedGainsDaily() {
+        return unrealizedGainsDaily;
+    }
+    
+    public void setUnrealizedGainsDaily(Long unrealizedGainsDaily) {
+        this.unrealizedGainsDaily = unrealizedGainsDaily;
+    }
+    
+    public Long getTotalEarnings() {
+        return totalEarnings;
+    }
+    
+    public void setTotalEarnings(Long totalEarnings) {
+        this.totalEarnings = totalEarnings;
     }
 }
 
