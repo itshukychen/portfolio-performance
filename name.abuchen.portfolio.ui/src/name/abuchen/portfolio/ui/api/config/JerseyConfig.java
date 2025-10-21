@@ -19,6 +19,8 @@ import name.abuchen.portfolio.ui.api.controller.PortfolioController;
 import name.abuchen.portfolio.ui.api.controller.PriceController;
 import name.abuchen.portfolio.ui.api.controller.SecurityAccountsController;
 import name.abuchen.portfolio.ui.api.controller.SecurityController;
+import name.abuchen.portfolio.ui.api.controller.TaxonomiesController;
+import name.abuchen.portfolio.ui.api.controller.TransactionsController;
 import name.abuchen.portfolio.ui.api.controller.WidgetController;
 
 /**
@@ -66,6 +68,8 @@ public class JerseyConfig extends ResourceConfig {
         register(SecurityAccountsController.class);
         register(EarningController.class);
         register(OptionsController.class);
+        register(TransactionsController.class);
+        register(TaxonomiesController.class);
         
         // Disable Bean Validation to avoid javax.validation dependency in OSGi
         property(ServerProperties.BV_FEATURE_DISABLE, true);

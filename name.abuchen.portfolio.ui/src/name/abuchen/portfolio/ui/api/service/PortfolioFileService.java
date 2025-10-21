@@ -24,32 +24,15 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import name.abuchen.portfolio.ui.api.dto.AccountDto;
-import name.abuchen.portfolio.ui.api.dto.AssignmentDto;
-import name.abuchen.portfolio.ui.api.dto.ClassificationDto;
 import name.abuchen.portfolio.ui.api.dto.CurrencyConversionDto;
-import name.abuchen.portfolio.ui.api.dto.DashboardDto;
-import name.abuchen.portfolio.ui.api.dto.PortfolioDto;
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.dto.ReportingPeriodDto;
-import name.abuchen.portfolio.ui.api.dto.SecurityDto;
-import name.abuchen.portfolio.ui.api.dto.TaxonomyDto;
-import name.abuchen.portfolio.ui.api.dto.TransactionDto;
-import name.abuchen.portfolio.ui.api.util.DashboardConverter;
-import name.abuchen.portfolio.ui.views.taxonomy.TaxonomyModel;
-import name.abuchen.portfolio.ui.views.taxonomy.TaxonomyNode;
-import name.abuchen.portfolio.model.AccountTransaction;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.ClientFactory;
-import name.abuchen.portfolio.model.Dashboard;
-import name.abuchen.portfolio.model.PortfolioTransaction;
-import name.abuchen.portfolio.model.TransactionPair;
 import name.abuchen.portfolio.money.CurrencyConverter;
 import name.abuchen.portfolio.money.CurrencyConverterImpl;
 import name.abuchen.portfolio.money.ExchangeRate;
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
-import name.abuchen.portfolio.money.Money;
-import name.abuchen.portfolio.snapshot.PortfolioSnapshot;
 import name.abuchen.portfolio.snapshot.ReportingPeriod;
 import name.abuchen.portfolio.model.ConfigurationSet.WellKnownConfigurationSets;
 
@@ -257,20 +240,14 @@ public class PortfolioFileService {
         fileInfo.setBaseCurrency(client.getBaseCurrency());
         fileInfo.setTimezone(ZoneId.systemDefault().getId());
         fileInfo.setVersion(client.getFileVersionAfterRead());
-        // Note: securitiesCount will be set by loadSecurities() after filtering
-        fileInfo.setAccountsCount(client.getAccounts().size());
-        fileInfo.setPortfoliosCount(client.getPortfolios().size());
-        fileInfo.setTransactionsCount(client.getAllTransactions().size());
         fileInfo.setClientLoaded(true);
         fileInfo.setClientInfo("Client loaded successfully");
         
-        loadDashboards(fileInfo, client);
+        // Set counts only (detailed data available via specialized controllers)
+        setCountsOnly(fileInfo, client);
+        
+        // Load only utility data (not available via other controllers)
         loadReportingPeriods(fileInfo, client, file);
-        loadPortfolios(fileInfo, client);
-        loadAccounts(fileInfo, client);
-        loadSecurities(fileInfo, client);
-        loadTaxonomies(fileInfo, client);
-        loadTransactions(fileInfo, client);
         loadCurrencyConversions(fileInfo, client);
     }
     
@@ -286,49 +263,38 @@ public class PortfolioFileService {
         fileInfo.setAccountsCount(0);
         fileInfo.setPortfoliosCount(0);
         fileInfo.setTransactionsCount(0);
+        fileInfo.setTaxonomiesCount(0);
         fileInfo.setClientLoaded(false);
         fileInfo.setClientInfo("Client creation failed - OSGi dependencies not available");
     }
     
     /**
-     * Loads and converts dashboards.
+     * Sets only count properties from client data.
+     * Detailed data should be retrieved via specialized controllers.
      * 
-     * @param fileInfo The file info to populate
+     * @param fileInfo The file info to populate with counts
      * @param client The loaded client
      */
-    private void loadDashboards(PortfolioFileInfo fileInfo, Client client) {
-        List<Dashboard> dashboards = client.getDashboards().collect(Collectors.toList());
-        logger.info("Found {} dashboards in portfolio", dashboards.size());
+    private void setCountsOnly(PortfolioFileInfo fileInfo, Client client) {
+        // Count securities (excluding retired and options contracts to match SecurityController)
+        long securitiesCount = client.getSecurities().stream()
+            .filter(s -> !s.isRetired()) // Skip retired securities
+            .filter(s -> {
+                // Skip options contracts (ticker symbol matching pattern: 6 digits + C/P + 8 digits)
+                String tickerSymbol = s.getTickerSymbol();
+                return tickerSymbol == null || !tickerSymbol.replaceAll("\\s+", "").matches(".*\\d{6}[CP]\\d{8}");
+            })
+            .count();
         
-        for (Dashboard dashboard : dashboards) {
-            logger.info("Dashboard: id={}, name={}, columns={}", 
-                dashboard.getId(), dashboard.getName(), dashboard.getColumns().size());
-        }
+        fileInfo.setSecuritiesCount((int) securitiesCount);
+        fileInfo.setAccountsCount(client.getAccounts().size());
+        fileInfo.setPortfoliosCount(client.getPortfolios().size());
+        fileInfo.setTransactionsCount(client.getAllTransactions().size());
+        fileInfo.setTaxonomiesCount(client.getTaxonomies().size());
         
-        fileInfo.setDashboards(DashboardConverter.toDtoList(dashboards));
-        logger.info("Set {} dashboards in fileInfo", 
-            fileInfo.getDashboards() != null ? fileInfo.getDashboards().size() : 0);
-        
-        // Add test dashboard if none exist (for testing serialization)
-        if (fileInfo.getDashboards() == null || fileInfo.getDashboards().isEmpty()) {
-            addTestDashboard(fileInfo);
-        }
-    }
-    
-    /**
-     * Adds a test dashboard for serialization testing.
-     * 
-     * @param fileInfo The file info to add the test dashboard to
-     */
-    private void addTestDashboard(PortfolioFileInfo fileInfo) {
-        logger.info("No dashboards found, creating test dashboard");
-        List<DashboardDto> testDashboards = new ArrayList<>();
-        DashboardDto testDashboard = new DashboardDto();
-        testDashboard.setId("test-id");
-        testDashboard.setName("Test Dashboard");
-        testDashboards.add(testDashboard);
-        fileInfo.setDashboards(testDashboards);
-        logger.info("Set test dashboard in fileInfo");
+        logger.info("Set counts: {} securities, {} accounts, {} portfolios, {} transactions, {} taxonomies",
+            securitiesCount, client.getAccounts().size(), client.getPortfolios().size(), 
+            client.getAllTransactions().size(), client.getTaxonomies().size());
     }
     
     /**
@@ -425,358 +391,6 @@ public class PortfolioFileService {
         return periodDtos;
     }
     
-    /**
-     * Loads and converts portfolios.
-     * 
-     * @param fileInfo The file info to populate
-     * @param client The loaded client
-     */
-    private void loadPortfolios(PortfolioFileInfo fileInfo, Client client) {
-        List<PortfolioDto> portfolioDtos = new ArrayList<>();
-        
-        // Create currency converter for portfolio valuations
-        ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
-        CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
-        LocalDate today = LocalDate.now();
-        
-        for (name.abuchen.portfolio.model.Portfolio portfolio : client.getPortfolios()) {
-            PortfolioDto dto = new PortfolioDto();
-            dto.setUuid(portfolio.getUUID());
-            dto.setName(portfolio.getName());
-            dto.setNote(portfolio.getNote());
-            dto.setRetired(portfolio.isRetired());
-            dto.setTransactionsCount(portfolio.getTransactions().size());
-            dto.setUpdatedAt(portfolio.getUpdatedAt());
-            
-            // Set reference account info
-            if (portfolio.getReferenceAccount() != null) {
-                dto.setReferenceAccountUuid(portfolio.getReferenceAccount().getUUID());
-                dto.setReferenceAccountName(portfolio.getReferenceAccount().getName());
-            }
-            
-            // Calculate current value (already in base currency)
-            try {
-                PortfolioSnapshot snapshot = PortfolioSnapshot.create(portfolio, converter, today);
-                Money value = snapshot.getValue();
-                // Convert from internal representation (multiplied by 100) to decimal
-                dto.setCurrentValue(value.getAmount() / 100.0);
-            } catch (Exception e) {
-                logger.warn("Failed to calculate portfolio value for {}: {}", portfolio.getName(), e.getMessage());
-                dto.setCurrentValue(0.0);
-            }
-            
-            portfolioDtos.add(dto);
-        }
-        
-        fileInfo.setPortfolios(portfolioDtos);
-        logger.info("Set {} portfolios in fileInfo", portfolioDtos.size());
-    }
-    
-    /**
-     * Loads and converts accounts.
-     * 
-     * @param fileInfo The file info to populate
-     * @param client The loaded client
-     */
-    private void loadAccounts(PortfolioFileInfo fileInfo, Client client) {       
-        List<AccountDto> accountDtos = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
-        
-        // Create currency converter for account valuations in base currency
-        ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
-        CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
-        
-        for (name.abuchen.portfolio.model.Account account : client.getAccounts()) {
-            AccountDto dto = new AccountDto();
-            dto.setUuid(account.getUUID());
-            dto.setName(account.getName());
-            dto.setCurrencyCode(account.getCurrencyCode());
-            dto.setNote(account.getNote());
-            dto.setRetired(account.isRetired());
-            dto.setTransactionsCount(account.getTransactions().size());
-            dto.setUpdatedAt(account.getUpdatedAt());
-            
-            // Calculate current value
-            try {
-                long currentAmount = account.getCurrentAmount(now);
-                // Convert from internal representation (multiplied by 100) to decimal
-                dto.setCurrentValue(currentAmount / 100.0);
-                
-                // Convert to base currency
-                Money accountMoney = Money.of(account.getCurrencyCode(), currentAmount);
-                Money convertedMoney = accountMoney.with(converter.at(LocalDate.now()));
-                dto.setCurrentValueInBaseCurrency(convertedMoney.getAmount() / 100.0);
-            } catch (Exception e) {
-                logger.warn("Failed to calculate account balance for {}: {}", account.getName(), e.getMessage());
-                dto.setCurrentValue(0.0);
-                dto.setCurrentValueInBaseCurrency(0.0);
-            }
-            
-            accountDtos.add(dto);
-        }
-        
-        fileInfo.setAccounts(accountDtos);
-        logger.info("Set {} accounts in fileInfo", accountDtos.size());
-    }
-    
-    /**
-     * Loads and converts securities.
-     * Filter out retired securities and options contracts.
-     * 
-     * @param fileInfo The file info to populate
-     * @param client The loaded client
-     */
-    private void loadSecurities(PortfolioFileInfo fileInfo, Client client) {
-        List<SecurityDto> securityDtos = new ArrayList<>();
-        
-        // Filter: exclude retired securities and options contracts (ticker matching pattern)
-        for (name.abuchen.portfolio.model.Security security : client.getSecurities()) {
-            // Skip retired securities
-            if (security.isRetired()) {
-                continue;
-            }
-            
-            // Skip options contracts (ticker symbol matching pattern: 6 digits + C/P + 8 digits)
-            String tickerSymbol = security.getTickerSymbol();
-            if (tickerSymbol != null && tickerSymbol.replaceAll("\\s+", "").matches(".*\\d{6}[CP]\\d{8}")) {
-                continue;
-            }
-            
-            SecurityDto dto = new SecurityDto();
-            dto.setUuid(security.getUUID());
-            dto.setName(security.getName());
-            dto.setCurrencyCode(security.getCurrencyCode());
-            dto.setTargetCurrencyCode(security.getTargetCurrencyCode());
-            dto.setIsin(security.getIsin());
-            dto.setTickerSymbol(tickerSymbol);
-            dto.setWkn(security.getWkn());
-            dto.setNote(security.getNote());
-            dto.setRetired(security.isRetired());
-            dto.setFeed(security.getFeed());
-            dto.setFeedURL(security.getFeedURL());
-            dto.setLatestFeed(security.getLatestFeed());
-            dto.setLatestFeedURL(security.getLatestFeedURL());
-            dto.setPricesCount(security.getPrices().size());
-            dto.setUpdatedAt(security.getUpdatedAt());
-            
-            securityDtos.add(dto);
-        }
-        
-        fileInfo.setSecurities(securityDtos);
-        fileInfo.setSecuritiesCount(securityDtos.size());
-        logger.info("Set {} active securities in fileInfo (filtered out retired and options contracts)", securityDtos.size());
-    }
-    
-    /**
-     * Loads and converts taxonomies.
-     * 
-     * @param fileInfo The file info to populate
-     * @param client The loaded client
-     */
-    private void loadTaxonomies(PortfolioFileInfo fileInfo, Client client) {
-        List<TaxonomyDto> taxonomyDtos = new ArrayList<>();
-        
-        // Create factory for exchange rates
-        ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
-        
-        for (name.abuchen.portfolio.model.Taxonomy taxonomy : client.getTaxonomies()) {
-            TaxonomyDto dto = new TaxonomyDto();
-            dto.setId(taxonomy.getId());
-            dto.setName(taxonomy.getName());
-            dto.setSource(taxonomy.getSource());
-            dto.setDimensions(taxonomy.getDimensions());
-            dto.setClassificationsCount(taxonomy.getAllClassifications().size());
-            dto.setHeight(taxonomy.getHeigth());
-            
-            // Create TaxonomyModel to calculate actual values and proportions
-            TaxonomyModel model = new TaxonomyModel(factory, client, taxonomy);
-            
-            // Convert the root classification
-            if (taxonomy.getRoot() != null) {
-                dto.setRoot(convertClassification(taxonomy.getRoot(), model.getClassificationRootNode()));
-            }
-            
-            taxonomyDtos.add(dto);
-        }
-        
-        fileInfo.setTaxonomies(taxonomyDtos);
-        logger.info("Set {} taxonomies in fileInfo", taxonomyDtos.size());
-    }
-    
-    /**
-     * Recursively converts a Classification to a ClassificationDto.
-     * 
-     * @param classification The classification to convert
-     * @param taxonomyNode The corresponding TaxonomyNode (used to calculate proportions)
-     * @return The converted ClassificationDto
-     */
-    private ClassificationDto convertClassification(name.abuchen.portfolio.model.Classification classification, TaxonomyNode taxonomyNode) {
-        ClassificationDto dto = new ClassificationDto();
-        dto.setId(classification.getId());
-        dto.setName(classification.getName());
-        dto.setDescription(classification.getNote());
-        dto.setColor(classification.getColor());
-        dto.setWeight(classification.getWeight());
-        dto.setRank(classification.getRank());
-        dto.setKey(classification.getKey());
-        
-        // Calculate proportion (Actual %) for this classification relative to its parent
-        if (taxonomyNode != null && taxonomyNode.getParent() != null) {
-            TaxonomyNode parentNode = taxonomyNode.getParent();
-            if (parentNode.getActual() != null && parentNode.getActual().getAmount() > 0 &&
-                taxonomyNode.getActual() != null) {
-                long parentActualAmount = parentNode.getActual().getAmount();
-                long actualAmount = taxonomyNode.getActual().getAmount();
-                double proportion = (double) actualAmount / (double) parentActualAmount;
-                dto.setProportion(proportion);
-            }
-        }
-        
-        // Get parent actual amount for calculating assignment proportions
-        long parentActual = taxonomyNode != null && taxonomyNode.getActual() != null 
-            ? taxonomyNode.getActual().getAmount() : 0;
-        
-        // Convert assignments
-        List<AssignmentDto> assignmentDtos = new ArrayList<>();
-        for (name.abuchen.portfolio.model.Classification.Assignment assignment : classification.getAssignments()) {
-            AssignmentDto assignmentDto = new AssignmentDto();
-            assignmentDto.setInvestmentVehicleUuid(assignment.getInvestmentVehicle().getUUID());
-            assignmentDto.setInvestmentVehicleName(assignment.getInvestmentVehicle().getName());
-            assignmentDto.setWeight(assignment.getWeight());
-            assignmentDto.setRank(assignment.getRank());
-            
-            // Calculate proportion (Actual %) from TaxonomyNode
-            if (taxonomyNode != null && parentActual > 0) {
-                TaxonomyNode assignmentNode = findAssignmentNode(taxonomyNode, assignment);
-                if (assignmentNode != null && assignmentNode.getActual() != null) {
-                    long actual = assignmentNode.getActual().getAmount();
-                    double proportion = (double) actual / (double) parentActual;
-                    assignmentDto.setProportion(proportion);
-                }
-            }
-            
-            assignmentDtos.add(assignmentDto);
-        }
-        dto.setAssignments(assignmentDtos);
-        
-        // Recursively convert children
-        List<ClassificationDto> childrenDtos = new ArrayList<>();
-        for (name.abuchen.portfolio.model.Classification child : classification.getChildren()) {
-            // Find the corresponding child node
-            TaxonomyNode childNode = findChildNode(taxonomyNode, child);
-            childrenDtos.add(convertClassification(child, childNode));
-        }
-        dto.setChildren(childrenDtos);
-        
-        return dto;
-    }
-    
-    /**
-     * Finds the assignment node that corresponds to the given assignment.
-     * 
-     * @param parentNode The parent taxonomy node
-     * @param assignment The assignment to find
-     * @return The matching TaxonomyNode or null if not found
-     */
-    private TaxonomyNode findAssignmentNode(TaxonomyNode parentNode, name.abuchen.portfolio.model.Classification.Assignment assignment) {
-        if (parentNode == null) return null;
-        
-        for (TaxonomyNode child : parentNode.getChildren()) {
-            if (child.isAssignment() && 
-                child.getAssignment().getInvestmentVehicle().equals(assignment.getInvestmentVehicle())) {
-                return child;
-            }
-        }
-        return null;
-    }
-    
-    /**
-     * Finds the child taxonomy node that corresponds to the given classification.
-     * 
-     * @param parentNode The parent taxonomy node
-     * @param classification The classification to find
-     * @return The matching TaxonomyNode or null if not found
-     */
-    private TaxonomyNode findChildNode(TaxonomyNode parentNode, name.abuchen.portfolio.model.Classification classification) {
-        if (parentNode == null) return null;
-        
-        for (TaxonomyNode child : parentNode.getChildren()) {
-            if (child.isClassification() && 
-                child.getClassification().getId().equals(classification.getId())) {
-                return child;
-            }
-        }
-        return null;
-    }
-    
-    /**
-     * Loads and converts all transactions (de-duplicated).
-     * 
-     * @param fileInfo The file info to populate
-     * @param client The loaded client
-     */
-    private void loadTransactions(PortfolioFileInfo fileInfo, Client client) {
-        List<TransactionDto> transactionDtos = new ArrayList<>();
-        
-        // Get all de-duplicated transactions from client
-        List<TransactionPair<?>> allTransactions = client.getAllTransactions();
-        
-        for (TransactionPair<?> pair : allTransactions) {
-            TransactionDto dto = new TransactionDto();
-            
-            var transaction = pair.getTransaction();
-            
-            // Set common fields
-            dto.setUuid(transaction.getUUID());
-            dto.setDateTime(transaction.getDateTime());
-            dto.setCurrencyCode(transaction.getCurrencyCode());
-            // Convert amount from internal representation to decimal
-            dto.setAmount(transaction.getAmount() / 100.0);
-            dto.setNote(transaction.getNote());
-            dto.setSource(transaction.getSource());
-            dto.setUpdatedAt(transaction.getUpdatedAt());
-            
-            // Set security info if present
-            if (transaction.getSecurity() != null) {
-                dto.setSecurityUuid(transaction.getSecurity().getUUID());
-                dto.setSecurityName(transaction.getSecurity().getName());
-            }
-            
-            // Convert shares from internal representation to decimal
-            dto.setShares(transaction.getShares() / 1000000.0);
-            
-            // Set owner info and transaction type
-            if (pair.getOwner() instanceof name.abuchen.portfolio.model.Account) {
-                name.abuchen.portfolio.model.Account account = (name.abuchen.portfolio.model.Account) pair.getOwner();
-                dto.setOwnerUuid(account.getUUID());
-                dto.setOwnerName(account.getName());
-                dto.setTransactionType("ACCOUNT");
-                
-                if (transaction instanceof AccountTransaction) {
-                    AccountTransaction at = (AccountTransaction) transaction;
-                    dto.setType(at.getType().name());
-                }
-            } else if (pair.getOwner() instanceof name.abuchen.portfolio.model.Portfolio) {
-                name.abuchen.portfolio.model.Portfolio portfolio = (name.abuchen.portfolio.model.Portfolio) pair.getOwner();
-                dto.setOwnerUuid(portfolio.getUUID());
-                dto.setOwnerName(portfolio.getName());
-                dto.setTransactionType("PORTFOLIO");
-                
-                if (transaction instanceof PortfolioTransaction) {
-                    PortfolioTransaction pt = (PortfolioTransaction) transaction;
-                    dto.setType(pt.getType().name());
-                }
-            }
-            
-            transactionDtos.add(dto);
-        }
-        
-        // Sort by date descending (newest first)
-        transactionDtos.sort((t1, t2) -> t2.getDateTime().compareTo(t1.getDateTime()));
-        
-        fileInfo.setTransactions(transactionDtos);
-        logger.info("Set {} transactions in fileInfo", transactionDtos.size());
-    }
     
     /**
      * Loads and converts currency conversion rates for today.

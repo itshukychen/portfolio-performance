@@ -24,18 +24,12 @@ public class PortfolioFileInfo {
     private int accountsCount;
     private int portfoliosCount;
     private int transactionsCount;
+    private int taxonomiesCount;
     private boolean clientLoaded;
     private String clientInfo;
-    private List<DashboardDto> dashboards;
+    
+    // Keep only reporting periods and currency conversions as utility data
     private List<ReportingPeriodDto> reportingPeriods;
-    
-    @JsonProperty("securityaccounts")
-    private List<PortfolioDto> portfolios;
-    
-    private List<AccountDto> accounts;
-    private List<SecurityDto> securities;
-    private List<TaxonomyDto> taxonomies;
-    private List<TransactionDto> transactions;
     private List<CurrencyConversionDto> currencyConversions;
     
     // Constructors
@@ -138,6 +132,14 @@ public class PortfolioFileInfo {
         this.transactionsCount = transactionsCount;
     }
     
+    public int getTaxonomiesCount() {
+        return taxonomiesCount;
+    }
+    
+    public void setTaxonomiesCount(int taxonomiesCount) {
+        this.taxonomiesCount = taxonomiesCount;
+    }
+    
     public boolean isClientLoaded() {
         return clientLoaded;
     }
@@ -154,62 +156,12 @@ public class PortfolioFileInfo {
         this.clientInfo = clientInfo;
     }
     
-    public List<DashboardDto> getDashboards() {
-        return dashboards;
-    }
-    
-    public void setDashboards(List<DashboardDto> dashboards) {
-        this.dashboards = dashboards;
-    }
-    
     public List<ReportingPeriodDto> getReportingPeriods() {
         return reportingPeriods;
     }
     
     public void setReportingPeriods(List<ReportingPeriodDto> reportingPeriods) {
         this.reportingPeriods = reportingPeriods;
-    }
-    
-    @JsonProperty("securityaccounts")
-    public List<PortfolioDto> getPortfolios() {
-        return portfolios;
-    }
-    
-    @JsonProperty("securityaccounts")
-    public void setPortfolios(List<PortfolioDto> portfolios) {
-        this.portfolios = portfolios;
-    }
-    
-    public List<AccountDto> getAccounts() {
-        return accounts;
-    }
-    
-    public void setAccounts(List<AccountDto> accounts) {
-        this.accounts = accounts;
-    }
-    
-    public List<SecurityDto> getSecurities() {
-        return securities;
-    }
-    
-    public void setSecurities(List<SecurityDto> securities) {
-        this.securities = securities;
-    }
-    
-    public List<TaxonomyDto> getTaxonomies() {
-        return taxonomies;
-    }
-    
-    public void setTaxonomies(List<TaxonomyDto> taxonomies) {
-        this.taxonomies = taxonomies;
-    }
-    
-    public List<TransactionDto> getTransactions() {
-        return transactions;
-    }
-    
-    public void setTransactions(List<TransactionDto> transactions) {
-        this.transactions = transactions;
     }
     
     public List<CurrencyConversionDto> getCurrencyConversions() {
