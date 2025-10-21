@@ -10,9 +10,16 @@ import org.glassfish.jersey.server.ServerProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import name.abuchen.portfolio.ui.api.controller.AccountsController;
+import name.abuchen.portfolio.ui.api.controller.DashboardController;
+import name.abuchen.portfolio.ui.api.controller.EarningController;
 import name.abuchen.portfolio.ui.api.controller.HelloWorldController;
+import name.abuchen.portfolio.ui.api.controller.OptionsController;
 import name.abuchen.portfolio.ui.api.controller.PortfolioController;
 import name.abuchen.portfolio.ui.api.controller.PriceController;
+import name.abuchen.portfolio.ui.api.controller.SecurityAccountsController;
+import name.abuchen.portfolio.ui.api.controller.SecurityController;
+import name.abuchen.portfolio.ui.api.controller.WidgetController;
 
 /**
  * Jersey configuration for JSON support in the Portfolio Performance API server.
@@ -50,6 +57,15 @@ public class JerseyConfig extends ResourceConfig {
         register(HelloWorldController.class);
         register(PortfolioController.class);
         register(PriceController.class);
+        
+        // Register new specialized controllers
+        register(SecurityController.class);
+        register(DashboardController.class);
+        register(WidgetController.class);
+        register(AccountsController.class);
+        register(SecurityAccountsController.class);
+        register(EarningController.class);
+        register(OptionsController.class);
         
         // Disable Bean Validation to avoid javax.validation dependency in OSGi
         property(ServerProperties.BV_FEATURE_DISABLE, true);

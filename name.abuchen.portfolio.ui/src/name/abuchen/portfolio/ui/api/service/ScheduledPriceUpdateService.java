@@ -196,7 +196,6 @@ public class ScheduledPriceUpdateService {
         }
         
         // Create predicate to filter only active (non-retired) securities
-        // Same logic as in PortfolioController.updatePrices()
         Predicate<Security> onlyActive = s -> !s.isRetired()
                  && (s.getTickerSymbol() == null || !s.getTickerSymbol().replaceAll("\\s+", "").matches(".*\\d{6}[CP]\\d{8}"));
         
