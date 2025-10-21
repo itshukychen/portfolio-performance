@@ -84,28 +84,48 @@ public class PortfolioController extends BaseController {
      * 
      * @param portfolioId The portfolio ID
      * @param password Optional password for encrypted portfolios
+     * @param allowCache Whether to allow using cached version (default: true)
      * @return Portfolio information
      */
     @GET
     @Path("/{portfolioId}")
     @Produces(MediaType.APPLICATION_JSON)
     public Response getPortfolioById(@PathParam("portfolioId") String portfolioId, 
-                                   @QueryParam("password") String password) {
+                                   @QueryParam("password") String password,
+                                   @QueryParam("allowCache") Boolean allowCache) {
         try {
-            logger.info("Opening portfolio by ID: " + portfolioId + " (cache size before: " + portfolioFileService.getCacheStats().get("cachedClients") + ")");
+            // Default allowCache to true if not specified
+            boolean useCache = allowCache == null || allowCache;
             
-            // Convert password string to char array if provided
+            logger.info("Opening portfolio by ID: " + portfolioId + " (allowCache: " + useCache + ", cache size: " + portfolioFileService.getCacheStats().get("cachedClients") + ")");
+            
+            PortfolioFileInfo fileInfo;
+            
+            // If cache is allowed, try to get from cache first
+            if (useCache) {
+                Client client = portfolioFileService.getPortfolio(portfolioId);
+                if (client != null) {
+                    logger.info("Using cached portfolio for ID: " + portfolioId);
+                    fileInfo = portfolioFileService.getFullPortfolioInfo(portfolioId);
+                    return Response.ok(fileInfo).build();
+                }
+                logger.info("Portfolio not in cache, loading from disk");
+            } else {
+                logger.info("Cache disabled, forcing reload from disk");
+            }
+            
+            // Cache miss or cache disabled - load from disk
             char[] passwordChars = null;
             if (password != null && !password.trim().isEmpty()) {
                 passwordChars = password.toCharArray();
             }
             
-            PortfolioFileInfo fileInfo = portfolioFileService.openFileById(
+            fileInfo = portfolioFileService.openFileById(
                 portfolioId,
                 passwordChars
             );
             
-            logger.info("Portfolio opened successfully (cache size after: " + portfolioFileService.getCacheStats().get("cachedClients") + ")");
+            logger.info("Portfolio loaded successfully (cache size after: " + portfolioFileService.getCacheStats().get("cachedClients") + ")");
             
             return Response.ok(fileInfo).build();
             
