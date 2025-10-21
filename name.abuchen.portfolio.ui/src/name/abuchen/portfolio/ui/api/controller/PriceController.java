@@ -37,7 +37,7 @@ import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
  * - Updating existing prices
  * - Deleting prices
  */
-@Path("/api/v1/portfolios")
+@Path("/api/v1/portfolios/{portfolioId}/securities/{securityUuid}/prices")
 public class PriceController {
     
     private static final Logger logger = LoggerFactory.getLogger(PriceController.class);
@@ -88,7 +88,7 @@ public class PriceController {
      * @return Response containing the security's historical prices
      */
     @GET
-    @Path("/{portfolioId}/securities/{securityUuid}/prices")
+    @Path("")
     @Produces(MediaType.APPLICATION_JSON)
     public Response getSecurityPrices(@PathParam("portfolioId") String portfolioId,
                                      @PathParam("securityUuid") String securityUuid) {
@@ -163,7 +163,7 @@ public class PriceController {
      * @return Response indicating success or failure
      */
     @POST
-    @Path("/{portfolioId}/securities/{securityUuid}/prices")
+    @Path("")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response addSecurityPrice(@PathParam("portfolioId") String portfolioId,
@@ -258,7 +258,7 @@ public class PriceController {
      * @return Response indicating success or failure
      */
     @PUT
-    @Path("/{portfolioId}/securities/{securityUuid}/prices/{date}")
+    @Path("/{date}")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response updateSecurityPrice(@PathParam("portfolioId") String portfolioId,
@@ -370,7 +370,7 @@ public class PriceController {
      * @return Response indicating success or failure
      */
     @DELETE
-    @Path("/{portfolioId}/securities/{securityUuid}/prices/{date}")
+    @Path("/{date}")
     @Produces(MediaType.APPLICATION_JSON)
     public Response deleteSecurityPrice(@PathParam("portfolioId") String portfolioId,
                                        @PathParam("securityUuid") String securityUuid,
