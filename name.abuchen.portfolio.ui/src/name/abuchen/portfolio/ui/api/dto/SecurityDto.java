@@ -23,12 +23,15 @@ public class SecurityDto {
     private String latestFeedURL;
     private int pricesCount;
     private Instant updatedAt;
+    private Double lastPrice;
+    private Double dailyPriceChange;
     
     // Holdings information
     private Long sharesHeld;
     private Double avgPricePerShare;
     private Long totalHoldingValueSecurityCurrency;
     private Long totalHoldingValueBaseCurrency;
+    private Long unrealizedGainsAllTime;
     private Long unrealizedGainsYTD;
     private Long unrealizedGainsDaily;
     private Long totalEarnings;
@@ -162,6 +165,22 @@ public class SecurityDto {
         this.updatedAt = updatedAt;
     }
     
+    public Double getLastPrice() {
+        return lastPrice;
+    }
+    
+    public void setLastPrice(Double lastPrice) {
+        this.lastPrice = lastPrice;
+    }
+    
+    public Double getDailyPriceChange() {
+        return dailyPriceChange;
+    }
+    
+    public void setDailyPriceChange(Double dailyPriceChange) {
+        this.dailyPriceChange = dailyPriceChange;
+    }
+    
     public Long getSharesHeld() {
         return sharesHeld;
     }
@@ -192,6 +211,14 @@ public class SecurityDto {
     
     public void setTotalHoldingValueBaseCurrency(Long totalHoldingValueBaseCurrency) {
         this.totalHoldingValueBaseCurrency = totalHoldingValueBaseCurrency;
+    }
+    
+    public Long getUnrealizedGainsAllTime() {
+        return unrealizedGainsAllTime;
+    }
+    
+    public void setUnrealizedGainsAllTime(Long unrealizedGainsAllTime) {
+        this.unrealizedGainsAllTime = unrealizedGainsAllTime;
     }
     
     public Long getUnrealizedGainsYTD() {

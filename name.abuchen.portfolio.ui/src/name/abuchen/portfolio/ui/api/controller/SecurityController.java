@@ -380,6 +380,45 @@ public class SecurityController extends BaseController {
         dto.setPricesCount(security.getPrices().size());
         dto.setUpdatedAt(security.getUpdatedAt());
         
+        // Set the last price
+        try {
+            name.abuchen.portfolio.model.SecurityPrice lastSecurityPrice = 
+                security.getSecurityPrice(LocalDate.now());
+            if (lastSecurityPrice != null && lastSecurityPrice.getValue() > 0) {
+                dto.setLastPrice(lastSecurityPrice.getValue() / (double) Values.Quote.factor());
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to get last price for security {}: {}", 
+                security.getName(), e.getMessage());
+        }
+        
+        // Set the daily price change
+        try {
+            java.util.Optional<name.abuchen.portfolio.util.Pair<name.abuchen.portfolio.model.SecurityPrice, 
+                name.abuchen.portfolio.model.SecurityPrice>> latestTwoPrices = 
+                security.getLatestTwoSecurityPrices();
+            
+            if (latestTwoPrices.isPresent()) {
+                name.abuchen.portfolio.util.Pair<name.abuchen.portfolio.model.SecurityPrice, 
+                    name.abuchen.portfolio.model.SecurityPrice> prices = latestTwoPrices.get();
+                name.abuchen.portfolio.model.SecurityPrice todayPrice = prices.getLeft();
+                name.abuchen.portfolio.model.SecurityPrice previousPrice = prices.getRight();
+            
+                if (todayPrice != null && previousPrice != null) {
+                    long todayValue = todayPrice.getValue();
+                    long previousValue = previousPrice.getValue();
+                    double priceChange = (todayValue - previousValue) / (double) Values.Quote.factor();
+                    dto.setDailyPriceChange(priceChange);
+                }
+            } else {
+                logger.info("No latest two prices available for security: {} - cannot calculate daily price change", 
+                    security.getName());
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to get daily price change for security {}: {}", 
+                security.getName(), e.getMessage(), e);
+        }
+        
         // Calculate holdings data using pre-created snapshots
         calculateHoldingsData(dto, security, client, snapshots);
         
@@ -447,6 +486,16 @@ public class SecurityController extends BaseController {
                     Money dividendsInBase = converter.convert(today, sumOfDividends);
                     dto.setTotalEarnings(dividendsInBase.getAmount() / Values.Money.factor());
                 }
+                
+                // Set all-time unrealized gains
+                Money capitalGains = record.getCapitalGainsOnHoldings();
+                if (capitalGains != null) {
+                    Money gainsInBase = converter.convert(today, capitalGains);
+                    dto.setUnrealizedGainsAllTime(gainsInBase.getAmount() / Values.Money.factor());
+                }
+            } else {
+                logger.info("All-time performance record not present for security: {} ({})", 
+                    security.getName(), security.getUUID());
             }
             
             // Get YTD performance record
@@ -459,6 +508,9 @@ public class SecurityController extends BaseController {
                     Money gainsInBase = converter.convert(today, capitalGains);
                     dto.setUnrealizedGainsYTD(gainsInBase.getAmount() / Values.Money.factor());
                 }
+            } else {
+                logger.info("YTD performance record not present for security: {} ({})", 
+                    security.getName(), security.getUUID());
             }
             
             // Get daily performance record

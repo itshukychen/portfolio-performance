@@ -573,6 +573,10 @@ public final class Security implements Attributable, InvestmentVehicle
      * Returns the latest two security prices needed to display the previous
      * close as well as to calculate the change on the previous close.
      * 
+     * If the latest price equals the last historical price (i.e., no live data
+     * available), the latest price is ignored and the last two historical prices
+     * are returned instead.
+     * 
      * @return a pair of security prices with the <em>left</em> being today's
      *         price and <em>right</em> being the previous close
      */
@@ -581,7 +585,19 @@ public final class Security implements Attributable, InvestmentVehicle
         if (prices.isEmpty())
             return Optional.empty();
 
-        List<SecurityPrice> list = getPricesIncludingLatest();
+        // Check if latest price equals the last historical price
+        // If so, use only historical prices to avoid always showing 0 change
+        boolean useOnlyHistorical = false;
+        if (latest != null && !prices.isEmpty())
+        {
+            SecurityPrice lastHistorical = prices.get(prices.size() - 1);
+            if (latest.getValue() == lastHistorical.getValue())
+            {
+                useOnlyHistorical = true;
+            }
+        }
+
+        List<SecurityPrice> list = useOnlyHistorical ? new ArrayList<>(prices) : getPricesIncludingLatest();
         if (list.size() < 2)
             return Optional.empty();
 
