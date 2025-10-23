@@ -1,7 +1,7 @@
 name: Build & Push (API)
 on:
   push:
-    branches: [ adding_api ]
+    branches: [ master ]
   workflow_dispatch:
 
 jobs:
