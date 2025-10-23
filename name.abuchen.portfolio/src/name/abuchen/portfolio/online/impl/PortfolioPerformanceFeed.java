@@ -98,18 +98,17 @@ public final class PortfolioPerformanceFeed implements QuoteFeed
     }
 
     /**
-     * Returns true if any of the securities require authentication for this
-     * feed.
+     * Returns the list of instrument that require authentication for this feed.
      */
-    public boolean requiresAuthentication(List<Security> securities)
+    public List<Security> requireAuthentication(List<Security> securities)
     {
-        return securities.stream().anyMatch(s -> {
+        return securities.stream().filter(s -> {
             if (!ID.equals(s.getFeed()))
                 return false;
             if (s.getTickerSymbol() == null)
                 return false;
             return !SAMPLE_SYMBOLS.contains(s.getTickerSymbol());
-        });
+        }).toList();
     }
 
     @Override
@@ -429,12 +428,12 @@ public final class PortfolioPerformanceFeed implements QuoteFeed
     @Override
     public List<Exchange> getExchanges(Security subject, List<Exception> errors)
     {
-        var parameter = "isin"; //$NON-NLS-1$
+        var parameter = PortfolioPerformanceSearchProvider.Parameter.ISIN;
         var query = subject.getIsin();
 
         if (query == null || query.isBlank())
         {
-            parameter = "symbol"; //$NON-NLS-1$
+            parameter = PortfolioPerformanceSearchProvider.Parameter.SYMBOL;
             query = subject.getTickerSymbol();
         }
 
@@ -444,7 +443,7 @@ public final class PortfolioPerformanceFeed implements QuoteFeed
         try
         {
             var answer = new ArrayList<Exchange>();
-            var candidates = new PortfolioPerformanceSearchProvider().internalSearch(parameter, query);
+            var candidates = new PortfolioPerformanceSearchProvider().search(parameter, query);
 
             for (var candidate : candidates) // NOSONAR
             {

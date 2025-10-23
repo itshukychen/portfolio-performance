@@ -1,0 +1,60 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# IDE files
+.vscode
+.idea
+*.iml
+.project
+.classpath
+.settings
+
+# Build artifacts (will be rebuilt in Docker)
+target/
+node_modules/
+build/
+dist/
+
+# Test files
+*.test.js
+*.spec.js
+__tests__/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Portfolio files (these should be mounted at runtime)
+portfolios/*.portfolio
+portfolios/*.backup*
+
+# Web app files (not needed for server)
+web/node_modules/
+web/.next/
+web/out/
+web/build/
+web/tsconfig.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+web/env.local
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+

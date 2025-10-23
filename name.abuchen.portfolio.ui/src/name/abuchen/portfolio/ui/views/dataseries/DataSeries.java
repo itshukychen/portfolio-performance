@@ -54,6 +54,12 @@ public final class DataSeries implements Adaptable
         FEES_ACCUMULATED(Messages.LabelFeesAccumulated), //
         TAXES(Messages.ColumnTaxes), //
         TAXES_ACCUMULATED(Messages.LabelAccumulatedTaxes), //
+        CAPITAL_GAINS(Messages.LabelCapitalGains), //
+        CAPITAL_GAINS_ACCUMULATED(Messages.LabelAccumulatedCapitalGains), //
+        REALIZED_CAPITAL_GAINS(Messages.LabelRealizedCapitalGains), //
+        REALIZED_CAPITAL_GAINS_ACCUMULATED(Messages.LabelAccumulatedRealizedCapitalGains), //
+        UNREALIZED_CAPITAL_GAINS(Messages.LabelUnrealizedCapitalGains), //
+        UNREALIZED_CAPITAL_GAINS_ACCUMULATED(Messages.LabelAccumulatedUnrealizedCapitalGains), //
 
         DELTA_PERCENTAGE(Messages.LabelAggregationDaily);
 
@@ -120,6 +126,7 @@ public final class DataSeries implements Adaptable
     private int lineWidth = 2;
 
     private RGB color;
+    private RGB colorNegative;
 
     private boolean showArea;
     private LineStyle lineStyle = LineStyle.SOLID;
@@ -142,6 +149,7 @@ public final class DataSeries implements Adaptable
         this.instance = instance;
         this.label = label;
         this.color = color;
+        this.colorNegative = color;
     }
 
     public Type getType()
@@ -204,9 +212,19 @@ public final class DataSeries implements Adaptable
         this.color = color;
     }
 
+    public void setColorNegative(RGB color)
+    {
+        this.colorNegative = color;
+    }
+
     public RGB getColor()
     {
         return color;
+    }
+
+    public RGB getColorNegative()
+    {
+        return colorNegative;
     }
 
     public boolean isLineChart()

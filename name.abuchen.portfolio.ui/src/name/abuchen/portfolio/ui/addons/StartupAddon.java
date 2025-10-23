@@ -41,9 +41,15 @@ import name.abuchen.portfolio.ui.update.UpdateHelper;
 import name.abuchen.portfolio.ui.util.ProgressMonitorFactory;
 import name.abuchen.portfolio.ui.util.RecentFilesCache;
 import name.abuchen.portfolio.ui.util.swt.ActiveShell;
+import name.abuchen.portfolio.ui.api.PortfolioApiServer;
+import name.abuchen.portfolio.ui.util.UI;
+import name.abuchen.portfolio.ui.util.Colors;
+import org.eclipse.swt.widgets.Display;
 
 public class StartupAddon
 {
+    private PortfolioApiServer apiServer;
+
     private static final class UpdateExchangeRatesJob extends Job
     {
         private final IEventBroker broker;
@@ -229,5 +235,71 @@ public class StartupAddon
     public void setupActiveShellTracker()
     {
         ActiveShell.get();
+    }
+
+    @PostConstruct
+    public void ensureDisplayAndPreloadSWT()
+    {
+        // Ensure Display is initialized early for headless server scenarios
+        // This must happen before any REST handlers try to access SWT resources
+        Display display = Display.getDefault();
+        if (display == null)
+        {
+            PortfolioPlugin.log("Display is not initialized - this may cause issues with SWT access");
+            return;
+        }
+        
+        // Pre-initialize static SWT singletons on the UI thread to avoid
+        // class initialization happening on Jersey worker threads
+        UI.sync(() -> {
+            try
+            {
+                // Force Colors class initialization on UI thread
+                // This class touches Display.getSystemColor() in static initializers
+                Colors.theme();
+                
+                // Add other classes here if they have static initializers that touch SWT:
+                // - Fonts
+                // - Images
+                // - Any other UI utility classes
+                
+                PortfolioPlugin.log("Pre-initialized SWT singletons on UI thread");
+            }
+            catch (Exception e)
+            {
+                PortfolioPlugin.log("Failed to pre-initialize SWT singletons", e);
+            }
+        });
+    }
+    
+    @PostConstruct
+    public void startApiServer()
+    {
+        try
+        {
+            apiServer = new PortfolioApiServer();
+            apiServer.start();
+            PortfolioPlugin.log("API Server started - UI thread marshalling is active for SWT access");
+        }
+        catch (Exception e)
+        {
+            PortfolioPlugin.log(e);
+        }
+    }
+
+    @PreDestroy
+    public void stopApiServer()
+    {
+        if (apiServer != null)
+        {
+            try
+            {
+                apiServer.stop();
+            }
+            catch (Exception e)
+            {
+                PortfolioPlugin.log(e);
+            }
+        }
     }
 }

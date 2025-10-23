@@ -20,6 +20,7 @@ public class Messages extends NLS
     public static String BalanceCheckFutureTransactionsWithMatchingValue;
     public static String BalanceCheckTransactionsOnOtherAccountWithMatchingValue;
     public static String ColumnCapitalGains;
+    public static String ColumnForexCapitalGains;
     public static String ColumnCurrencyGains;
     public static String ColumnEarnings;
     public static String ColumnFinalValue;
@@ -224,6 +225,7 @@ public class Messages extends NLS
     public static String LabelTradeCalendarSSE;
     public static String LabelTradeCalendarSix;
     public static String LabelTradeCalendarTARGET2;
+    public static String LabelTradeCalendarTLV;
     public static String LabelTradeCalendarTSX;
     public static String LabelTradeCalendarUseDefault;
     public static String LabelTradeCalendarVSE;

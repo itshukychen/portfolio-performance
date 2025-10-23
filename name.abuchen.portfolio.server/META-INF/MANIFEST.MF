@@ -1,0 +1,14 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Portfolio Performance Server
+Bundle-SymbolicName: name.abuchen.portfolio.server;singleton:=true
+Bundle-Version: 0.80.4.qualifier
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Bundle-Vendor: Andreas Buchen
+Bundle-ActivationPolicy: lazy
+Require-Bundle: org.eclipse.core.runtime,
+ org.eclipse.swt,
+ name.abuchen.portfolio.ui,
+ name.abuchen.portfolio
+Automatic-Module-Name: name.abuchen.portfolio.server
+

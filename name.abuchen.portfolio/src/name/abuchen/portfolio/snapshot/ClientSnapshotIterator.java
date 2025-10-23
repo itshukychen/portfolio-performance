@@ -113,7 +113,7 @@ import name.abuchen.portfolio.money.Values;
 
         for (SecurityPosition position : securities.values())
         {
-            if (position.shares == 0)
+            if (position.shares <= 0)
                 continue;
 
             SecurityPrice price = position.security.getSecurityPrice(date);
