@@ -20,24 +20,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build image
-        run: |
-          IMAGE=ghcr.io/${{ github.repository }}:latest
-          IMAGE_SHA=ghcr.io/${{ github.repository }}:${{ github.sha }}
-          docker build -t "$IMAGE" -t "$IMAGE_SHA" .
-
-      - name: Push image
-        run: |
-          IMAGE=ghcr.io/${{ github.repository }}:latest
-          IMAGE_SHA=ghcr.io/${{ github.repository }}:${{ github.sha }}
-          docker push "$IMAGE"
-          docker push "$IMAGE_SHA"
-      
-      - name: Get digest
-        id: digest
-        run: |
-          DIGEST=$(crane digest ghcr.io/${{ github.repository }}:${{ github.sha }})
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+      - name: Build & push
+        id: bp
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+            
+      - name: Show digest
+        run: echo "Digest is ${{ steps.bp.outputs.digest }}"
       
       - name: Notify ops repo
         uses: peter-evans/repository-dispatch@v3
@@ -46,6 +41,8 @@ jobs:
           repository: itshukychen/investment-ops
           event-type: image-published
           client-payload: >
-            { "service": "pp-api",
-              "image": "ghcr.io/${{ github.repository }}:${{ github.sha }}",
-              "digest": "${{ steps.push.outputs.digest }}" }
+            {
+              "service": "pp-api",
+              "image": "ghcr.io/${{ github.repository }}",
+              "digest": "${{ steps.bp.outputs.digest }}"
+            }
