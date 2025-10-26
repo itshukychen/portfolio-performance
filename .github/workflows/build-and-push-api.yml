@@ -32,4 +32,20 @@ jobs:
           IMAGE_SHA=ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker push "$IMAGE"
           docker push "$IMAGE_SHA"
-
+      
+      - name: Get digest
+        id: digest
+        run: |
+          DIGEST=$(crane digest ghcr.io/${{ github.repository }}:${{ github.sha }})
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+      
+      - name: Notify ops repo
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.OPSPROD_DISPATCH_TOKEN }}
+          repository: itshukychen/investment-ops
+          event-type: image-published
+          client-payload: >
+            { "service": "pp-api",
+              "image": "ghcr.io/${{ github.repository }}:${{ github.sha }}",
+              "digest": "${{ steps.push.outputs.digest }}" }
