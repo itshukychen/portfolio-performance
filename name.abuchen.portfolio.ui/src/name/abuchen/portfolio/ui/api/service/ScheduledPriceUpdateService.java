@@ -79,20 +79,20 @@ public class ScheduledPriceUpdateService {
         // Load exchange rate providers from cache first (one-time operation)
         ExchangeRateProviderLoader.ensureLoaded();
         
-        // Schedule LATEST price updates every 60 seconds with initial delay of 60 seconds
+        // Schedule LATEST price updates every 60 seconds - run immediately on startup
         latestScheduler.scheduleAtFixedRate(
             this::updateLatestPrices,
-            LATEST_UPDATE_INTERVAL_SECONDS,
+            0,  // Run immediately
             LATEST_UPDATE_INTERVAL_SECONDS,
             TimeUnit.SECONDS
         );
         
-        // Schedule HISTORIC price + exchange rate updates every 10 minutes with initial delay of 10 minutes
+        // Schedule HISTORIC price + exchange rate updates every 10 minutes - run immediately on startup
         historicScheduler.scheduleAtFixedRate(
             this::updateHistoricPricesAndExchangeRates,
+            0,  // Run immediately
             HISTORIC_UPDATE_INTERVAL_MINUTES,
-          HISTORIC_UPDATE_INTERVAL_MINUTES,
-          TimeUnit.MINUTES
+            TimeUnit.MINUTES
         );
         
         logger.info("✅ Scheduled price and exchange rate update service started successfully");
