@@ -304,7 +304,9 @@ public class ServerLauncher implements IApplication
     
     /**
      * Start the scheduled price and exchange rate update service.
-     * This service will automatically update exchange rates and prices for all loaded portfolios every 10 minutes.
+     * This service will automatically update prices on two schedules:
+     * - LATEST prices: every 30 seconds for real-time updates
+     * - HISTORIC prices + exchange rates: every 10 minutes
      */
     private void startScheduledPriceUpdateService()
     {
@@ -327,7 +329,8 @@ public class ServerLauncher implements IApplication
             scheduledPriceUpdateService.start();
             
             PortfolioLog.info("✅ Scheduled update service started");
-            PortfolioLog.info("   Updates every 10 minutes:");
+            PortfolioLog.info("   LATEST prices: every 30 seconds (real-time)");
+            PortfolioLog.info("   HISTORIC prices: every 10 minutes");
             PortfolioLog.info("   • Exchange rates from online sources");
             PortfolioLog.info("   • Security prices for all loaded portfolios");
             PortfolioLog.info("   • lastPriceUpdateTime property on all portfolios");
