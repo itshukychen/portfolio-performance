@@ -658,7 +658,7 @@ public class PortfolioFileService {
      * @return The cached Client or null if not found in cache
      */
     public Client getPortfolio(String portfolioId) {
-        logger.info("Getting cached portfolio for ID: {}", portfolioId);
+        logger.debug("Getting cached portfolio for ID: {}", portfolioId);
         
         if (portfolioId == null || portfolioId.trim().isEmpty()) {
             logger.warn("Portfolio ID cannot be null or empty");
@@ -669,7 +669,7 @@ public class PortfolioFileService {
         Client client = clientCache.get(portfolioId);
         
         if (client != null) {
-            logger.info("Found cached client for portfolio ID: {}", portfolioId);
+            logger.debug("Found cached client for portfolio ID: {}", portfolioId);
         } else {
             logger.info("No cached client found for portfolio ID: {}", portfolioId);
         }

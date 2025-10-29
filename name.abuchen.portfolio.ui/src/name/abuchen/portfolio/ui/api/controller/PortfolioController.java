@@ -222,7 +222,7 @@ public class PortfolioController extends BaseController {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getLastPriceUpdateTime(@PathParam("portfolioId") String portfolioId) {
         try {
-            logger.info("Getting last price update time for portfolio: " + portfolioId);
+            logger.debug("Getting last price update time for portfolio: " + portfolioId);
             
             // Get the cached Client for this portfolio
             Client client = portfolioFileService.getPortfolio(portfolioId);

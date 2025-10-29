@@ -75,7 +75,7 @@ public class ScheduledPriceUpdateService {
         logger.info("🕐 Starting scheduled price and exchange rate update service");
         logger.info("   • LATEST prices: every {} seconds", LATEST_UPDATE_INTERVAL_SECONDS);
         logger.info("   • HISTORIC prices + exchange rates: every {} minutes", HISTORIC_UPDATE_INTERVAL_MINUTES);
-360      
+      
         // Load exchange rate providers from cache first (one-time operation)
         ExchangeRateProviderLoader.ensureLoaded();
         
@@ -91,8 +91,8 @@ public class ScheduledPriceUpdateService {
         historicScheduler.scheduleAtFixedRate(
             this::updateHistoricPricesAndExchangeRates,
             HISTORIC_UPDATE_INTERVAL_MINUTES,
- 360         HISTORIC_UPDATE_INTERVAL_MINUTES,
- 360         TimeUnit.MINUTES
+          HISTORIC_UPDATE_INTERVAL_MINUTES,
+          TimeUnit.MINUTES
         );
         
         logger.info("✅ Scheduled price and exchange rate update service started successfully");
