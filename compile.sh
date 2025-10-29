@@ -244,7 +244,8 @@ if [[ $OVERALL_EXIT_CODE -eq 0 ]]; then
         echo ""
         SERVER_APP="$SCRIPT_DIR/portfolio-product/target/products/name.abuchen.portfolio.server.product/macosx/cocoa/aarch64/portfolio-server.app"
         if [[ -d "$SERVER_APP" ]]; then
-            PORTFOLIO_DIR=$(realpath $SCRIPT_DIR/portfolios) "$SERVER_APP/Contents/MacOS/PortfolioPerformanceServer" -nosplash -consoleLog
+            set -x
+            PORTFOLIO_DIR=$(realpath $SCRIPT_DIR/portfolios) ECB_DATA_DIR=/Users/shuky/.pp-api/config "$SERVER_APP/Contents/MacOS/PortfolioPerformanceServer" -nosplash -consoleLog
         else
             echo "❌ Server executable not found at: $SERVER_APP"
             echo "   Please build the server first with: $0 --server"

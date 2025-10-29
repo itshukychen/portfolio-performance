@@ -68,11 +68,22 @@ public class ECBExchangeRateProvider implements ExchangeRateProvider
         monitor.beginTask(MessageFormat.format(Messages.MsgLoadingExchangeRates, getName()), 1);
 
         File file = getStorageFile(FILE_STORAGE_PB);
+        
+        // Log the file path to help debug persistence issues
+        System.out.println("📥 ECB: Looking for exchange rates at: " + file.getAbsolutePath());
+        System.out.println("   File exists: " + file.exists());
+        
         if (file.exists())
         {
+            System.out.println("   File size: " + file.length() + " bytes");
             PECBData binary = read(file);
             data = convert(binary);
             monitor.worked(1);
+            System.out.println("✅ ECB: Successfully loaded exchange rates from: " + file.getAbsolutePath());
+        }
+        else
+        {
+            System.out.println("⚠️  ECB: Cache file not found, will use defaults until updated from internet");
         }
     }
 
@@ -117,6 +128,10 @@ public class ECBExchangeRateProvider implements ExchangeRateProvider
             return;
 
         File file = getStorageFile(FILE_STORAGE_PB);
+        
+        // Log the file path to help debug persistence issues
+        System.out.println("💾 ECB: Saving exchange rates to: " + file.getAbsolutePath());
+        System.out.println("   File exists: " + file.exists() + ", Parent exists: " + file.getParentFile().exists());
 
         PECBData.Builder binary = PECBData.newBuilder();
 
@@ -137,6 +152,9 @@ public class ECBExchangeRateProvider implements ExchangeRateProvider
         }
 
         write(binary.build(), file);
+        
+        // Confirm the file was written successfully
+        System.out.println("✅ ECB: Successfully saved " + file.length() + " bytes to: " + file.getAbsolutePath());
     }
 
     @Override
@@ -147,6 +165,22 @@ public class ECBExchangeRateProvider implements ExchangeRateProvider
 
     private File getStorageFile(String name)
     {
+        // Check for environment variable first to allow explicit data directory configuration
+        String dataDir = System.getenv("ECB_DATA_DIR");
+        if (dataDir != null && !dataDir.trim().isEmpty())
+        {
+            File dir = new File(dataDir);
+            if (!dir.exists())
+            {
+                System.out.println("📁 ECB: Creating data directory: " + dir.getAbsolutePath());
+                dir.mkdirs();
+            }
+            File file = new File(dir, name);
+            System.out.println("📁 ECB: Using environment variable ECB_DATA_DIR: " + file.getAbsolutePath());
+            return file;
+        }
+        
+        // Fall back to OSGi bundle data file (default behavior)
         Bundle bundle = FrameworkUtil.getBundle(ECBExchangeRateProvider.class);
         return bundle.getDataFile(name);
     }

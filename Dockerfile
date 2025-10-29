@@ -21,9 +21,9 @@ RUN mvn -f portfolio-app/pom.xml clean install \
     -Dtycho.targetPlatform=portfolio-target-definition/portfolio-target-definition.target \
     -Dtycho.p2.transport.min-cache-minutes=1800 \
     -Dtycho.p2.mirrors=false \
-    -Dtarget.os=macosx \
-    -Dtarget.ws=cocoa \
-    -Dtarget.arch=aarch64 \
+    -Dtarget.os=linux \
+    -Dtarget.ws=gtk \
+    -Dtarget.arch=x86_64 \
     -T 16 -DskipTests \
     -Dmaven.main.skip=true
 
@@ -52,7 +52,8 @@ RUN mkdir -p /app/workspace
 
 # Set environment variables
 ENV PORTFOLIO_DIR=/app/portfolios \
-    PORTFOLIO_SERVER_PORT=8080
+    PORTFOLIO_SERVER_PORT=8080 \
+    ECB_DATA_DIR=/app/workspace/
 
 # Create portfolios directory
 RUN mkdir -p ${PORTFOLIO_DIR}
