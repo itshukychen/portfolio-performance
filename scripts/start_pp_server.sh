@@ -11,21 +11,16 @@ if [[ ! -x "${SERVER_BIN}" ]]; then
   exit 1
 fi
 
-WORKSPACE_DIR="${WORKSPACE_DIR:-/home/ppuser/workspace}"
+WORKSPACE_DIR="${WORKSPACE_DIR:-/app/workspace}"
 PORTFOLIO_SERVER_PORT="${PORTFOLIO_SERVER_PORT:-8080}"
 
 echo "Starting Portfolio Performance Server..."
 echo "  Port: ${PORTFOLIO_SERVER_PORT}"
 echo "  Workspace: ${WORKSPACE_DIR}"
 echo "  Portfolio Directory: ${PORTFOLIO_DIR:-}"
-echo "  User: $(whoami)"
-echo "  UID: $(id -u)"
 
-# Ensure workspace directory exists and is writable
-if [[ ! -d "${WORKSPACE_DIR}" ]]; then
-  echo "Creating workspace directory: ${WORKSPACE_DIR}"
-  mkdir -p "${WORKSPACE_DIR}"
-fi
+# Ensure workspace directory exists
+mkdir -p "${WORKSPACE_DIR}"
 
 # Run server with xvfb (virtual X server for headless SWT)
 # Using -a flag to automatically choose display number

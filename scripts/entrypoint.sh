@@ -11,35 +11,23 @@ echo "Portfolio Performance Docker Container"
 echo "Mode: ${RUN_MODE}"
 echo "=================================================="
 
-# Ensure workspace directory exists and has proper ownership
-WORKSPACE_DIR="${WORKSPACE_DIR:-/home/ppuser/workspace}"
+# Ensure workspace directory exists
+WORKSPACE_DIR="${WORKSPACE_DIR:-/app/workspace}"
 PORTFOLIO_DIR="${PORTFOLIO_DIR:-/opt/pp/portfolios}"
 
 echo "Setting up directories..."
 echo "  Workspace: ${WORKSPACE_DIR}"
 echo "  Portfolios: ${PORTFOLIO_DIR}"
 
-# Create and fix permissions for workspace if needed
-if [[ ! -d "${WORKSPACE_DIR}" ]]; then
-  echo "Creating workspace directory..."
-  mkdir -p "${WORKSPACE_DIR}"
-fi
-chown -R ppuser:ppuser "${WORKSPACE_DIR}" 2>/dev/null || true
+mkdir -p "${WORKSPACE_DIR}" "${PORTFOLIO_DIR}"
 
-# Create and fix permissions for portfolio directory if needed
-if [[ ! -d "${PORTFOLIO_DIR}" ]]; then
-  echo "Creating portfolio directory..."
-  mkdir -p "${PORTFOLIO_DIR}"
-fi
-chown -R ppuser:ppuser "${PORTFOLIO_DIR}" 2>/dev/null || true
-
-echo "Starting as user ppuser (UID $(id -u ppuser))..."
+echo "Starting as root..."
 echo ""
 
 case "${RUN_MODE}" in
   server)
     echo "Starting in SERVER mode (REST API)"
-    exec gosu ppuser:ppuser /opt/bin/start_pp_server.sh
+    exec /opt/bin/start_pp_server.sh
     ;;
   
   ui)
@@ -53,13 +41,7 @@ case "${RUN_MODE}" in
     sleep 3
     
     echo "X server ready, starting Portfolio Performance UI..."
-    
-    # Run UI as ppuser
-    if command -v gosu >/dev/null 2>&1; then
-      exec gosu ppuser:ppuser /opt/bin/start_pp_ui.sh
-    else
-      exec su -s /bin/bash -c "/opt/bin/start_pp_ui.sh" ppuser
-    fi
+    exec /opt/bin/start_pp_ui.sh
     
     # If UI exits, clean up VNC
     wait "${XVNC_PID}"

@@ -32,9 +32,8 @@ VNC_ARGS=()
 if [[ -n "${VNC_PASSWORD:-}" ]]; then
   echo "Setting up VNC with password authentication..."
   # store passwd for x11vnc
-  x11vnc -storepasswd "${VNC_PASSWORD}" /home/ppuser/.vncpass >/dev/null 2>&1
-  chown ppuser:ppuser /home/ppuser/.vncpass
-  VNC_ARGS=(-rfbauth /home/ppuser/.vncpass)
+  x11vnc -storepasswd "${VNC_PASSWORD}" /root/.vncpass >/dev/null 2>&1
+  VNC_ARGS=(-rfbauth /root/.vncpass)
 else
   echo "Starting VNC without password (use VNC_PASSWORD env var to set one)"
   VNC_ARGS=(-nopw)

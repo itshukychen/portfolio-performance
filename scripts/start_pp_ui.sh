@@ -11,12 +11,15 @@ if [[ ! -x "${UI_BIN}" ]]; then
   exit 1
 fi
 
-WORKSPACE_DIR="${WORKSPACE_DIR:-/home/ppuser/workspace}"
+WORKSPACE_DIR="${WORKSPACE_DIR:-/app/workspace}"
 
 echo "Starting Portfolio Performance UI..."
 echo "  Display: ${DISPLAY}"
 echo "  Workspace: ${WORKSPACE_DIR}"
-echo "  Portfolio Directory: ${PORTFOLIO_DIR}"
+echo "  Portfolio Directory: ${PORTFOLIO_DIR:-}"
+
+# Ensure workspace exists
+mkdir -p "${WORKSPACE_DIR}"
 
 # Run UI (X server already started by entrypoint)
 exec "${UI_BIN}" \

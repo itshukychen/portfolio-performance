@@ -35,18 +35,14 @@ FROM eclipse-temurin:21-jre
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 LC_ALL=C.UTF-8 \
     TZ=Etc/UTC \
-    DISPLAY=:0
-
-# Create non-root user/group
-RUN groupadd -g 10001 ppuser && \
-    useradd -m -u 10001 -g 10001 -s /bin/bash ppuser
+    DISPLAY=:0 \
+    HOME=/root
 
 # Install runtime dependencies: JVM, X stack, VNC, WM, tools
 # These cover both server (minimal) and UI (with VNC) needs
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb x11vnc xauth x11-xserver-utils x11-utils \
     fluxbox \
-    gosu \
     curl ca-certificates wget \
     fonts-dejavu-core \
     net-tools procps \
@@ -77,18 +73,17 @@ COPY scripts/start_pp_server.sh /opt/bin/start_pp_server.sh
 RUN chmod 0755 /opt/bin/*.sh
 
 # Create workspace and portfolios directories
-RUN mkdir -p /home/ppuser/workspace /opt/pp/portfolios && \
-    chown -R ppuser:ppuser /home/ppuser /opt/pp
+RUN mkdir -p /app/workspace /opt/pp/portfolios
 
 # Set environment variables
 ENV PORTFOLIO_DIR=/opt/pp/portfolios \
-    WORKSPACE_DIR=/home/ppuser/workspace \
+    WORKSPACE_DIR=/app/workspace \
     PORTFOLIO_SERVER_PORT=8080 \
     RUN_MODE=server
 
 # Runtime defaults
 USER root
-WORKDIR /home/ppuser
+WORKDIR /root
 
 # Expose both server API and VNC ports
 # - 8080: REST API (server mode)
@@ -100,7 +95,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD if [ "$RUN_MODE" = "server" ]; then wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/portfolios/health || exit 1; else exit 0; fi
 
 # Persist workspace and portfolios
-VOLUME ["/home/ppuser/workspace"]
+VOLUME ["/app/workspace"]
 VOLUME ["/opt/pp/portfolios"]
 
 # Entrypoint (chooses server or UI based on RUN_MODE env var)
