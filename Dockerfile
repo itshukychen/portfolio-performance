@@ -56,7 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglu1-mesa \
     fontconfig \
     libxext6 libxrender1 libxi6 libxrandr2 libxxf86vm1 \
-    libasound2 libfontconfig1 libfreetype6 \
+    libasound2t64 libfontconfig1 libfreetype6 \
     libglib2.0-0 libnss3 libatk1.0-0 libcairo2 \
     libpango-1.0-0 libpangocairo-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
