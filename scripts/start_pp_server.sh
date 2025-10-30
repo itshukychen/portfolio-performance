@@ -18,13 +18,18 @@ echo "Starting Portfolio Performance Server..."
 echo "  Port: ${PORTFOLIO_SERVER_PORT}"
 echo "  Workspace: ${WORKSPACE_DIR}"
 echo "  Portfolio Directory: ${PORTFOLIO_DIR:-}"
+echo "  Server Binary: ${SERVER_BIN}"
 
 # Ensure workspace directory exists
 mkdir -p "${WORKSPACE_DIR}"
 
+# Clean up any stale X11 lock files
+rm -f /tmp/.X*-lock /tmp/.X11-unix/X* 2>/dev/null || true
+
 # Run server with xvfb (virtual X server for headless SWT)
 # Using -a flag to automatically choose display number
-exec xvfb-run -a -s "-screen 0 1024x768x24" "${SERVER_BIN}" \
+echo "Launching xvfb-run..."
+exec xvfb-run -a -e /dev/stderr -s "-screen 0 1024x768x24" "${SERVER_BIN}" \
   -nosplash \
   -consoleLog \
   -vmargs \
