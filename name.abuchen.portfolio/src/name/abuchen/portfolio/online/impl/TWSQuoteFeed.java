@@ -66,6 +66,29 @@ public final class TWSQuoteFeed implements QuoteFeed
     }
 
     /**
+     * Returns a unique grouping criterion for each security to enable parallel price updates.
+     * TWS API server can handle multiple concurrent requests, so we use the security's ISIN
+     * to ensure each security is processed in its own job group.
+     */
+    @Override
+    public String getGroupingCriterion(Security security)
+    {
+        // Use ISIN as unique identifier to enable parallel processing
+        // Fallback to UUID if ISIN is not available
+        String isin = security.getIsin();
+        return isin != null && !isin.isBlank() ? (ID + ":" + isin) : (ID + ":" + security.getUUID()); //$NON-NLS-1$ //$NON-NLS-2$
+    }
+
+    /**
+     * Returns a unique grouping criterion for latest quotes to enable parallel updates.
+     */
+    @Override
+    public String getLatestGroupingCriterion(Security security)
+    {
+        return getGroupingCriterion(security);
+    }
+
+    /**
      * Sets the TWS server host. Can be configured via security properties.
      */
     public void setServerHost(String serverHost)
