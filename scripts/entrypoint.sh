@@ -11,6 +11,31 @@ echo "Portfolio Performance Docker Container"
 echo "Mode: ${RUN_MODE}"
 echo "=================================================="
 
+# Ensure workspace directory exists and has proper ownership
+WORKSPACE_DIR="${WORKSPACE_DIR:-/home/ppuser/workspace}"
+PORTFOLIO_DIR="${PORTFOLIO_DIR:-/opt/pp/portfolios}"
+
+echo "Setting up directories..."
+echo "  Workspace: ${WORKSPACE_DIR}"
+echo "  Portfolios: ${PORTFOLIO_DIR}"
+
+# Create and fix permissions for workspace if needed
+if [[ ! -d "${WORKSPACE_DIR}" ]]; then
+  echo "Creating workspace directory..."
+  mkdir -p "${WORKSPACE_DIR}"
+fi
+chown -R ppuser:ppuser "${WORKSPACE_DIR}" 2>/dev/null || true
+
+# Create and fix permissions for portfolio directory if needed
+if [[ ! -d "${PORTFOLIO_DIR}" ]]; then
+  echo "Creating portfolio directory..."
+  mkdir -p "${PORTFOLIO_DIR}"
+fi
+chown -R ppuser:ppuser "${PORTFOLIO_DIR}" 2>/dev/null || true
+
+echo "Starting as user ppuser (UID $(id -u ppuser))..."
+echo ""
+
 case "${RUN_MODE}" in
   server)
     echo "Starting in SERVER mode (REST API)"

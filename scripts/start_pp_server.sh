@@ -17,10 +17,19 @@ PORTFOLIO_SERVER_PORT="${PORTFOLIO_SERVER_PORT:-8080}"
 echo "Starting Portfolio Performance Server..."
 echo "  Port: ${PORTFOLIO_SERVER_PORT}"
 echo "  Workspace: ${WORKSPACE_DIR}"
-echo "  Portfolio Directory: ${PORTFOLIO_DIR}"
+echo "  Portfolio Directory: ${PORTFOLIO_DIR:-}"
+echo "  User: $(whoami)"
+echo "  UID: $(id -u)"
+
+# Ensure workspace directory exists and is writable
+if [[ ! -d "${WORKSPACE_DIR}" ]]; then
+  echo "Creating workspace directory: ${WORKSPACE_DIR}"
+  mkdir -p "${WORKSPACE_DIR}"
+fi
 
 # Run server with xvfb (virtual X server for headless SWT)
-exec xvfb-run -a "${SERVER_BIN}" \
+# Using -a flag to automatically choose display number
+exec xvfb-run -a -s "-screen 0 1024x768x24" "${SERVER_BIN}" \
   -nosplash \
   -consoleLog \
   -vmargs \
