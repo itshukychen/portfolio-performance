@@ -46,3 +46,16 @@ jobs:
               "image": "ghcr.io/${{ github.repository }}",
               "digest": "${{ steps.bp.outputs.digest }}"
             }
+      
+      - name: Notify ops repo
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.OPSPROD_DISPATCH_TOKEN }}
+          repository: itshukychen/investment-ops
+          event-type: image-published
+          client-payload: >
+            {
+              "service": "pp-ui",
+              "image": "ghcr.io/${{ github.repository }}",
+              "digest": "${{ steps.bp.outputs.digest }}"
+            }
