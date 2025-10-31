@@ -3,6 +3,8 @@ set -Eeuo pipefail
 
 # Start Portfolio Performance Server (REST API)
 
+# Unbuffer output immediately
+export PYTHONUNBUFFERED=1
 export DISPLAY="${DISPLAY:-:0}"
 
 SERVER_DIR="/opt/pp/server/portfolio-server"
@@ -48,10 +50,42 @@ rm -f /tmp/.X*-lock /tmp/.X11-unix/X* 2>/dev/null || true
 # Using -a flag to automatically choose display number
 echo "Launching xvfb-run..."
 echo "Command: xvfb-run -a -e /dev/stderr -s \"-screen 0 1024x768x24\" ${SERVER_BIN} -nosplash -consoleLog -vmargs -Dportfolio.server.port=${PORTFOLIO_SERVER_PORT} -Dosgi.instance.area=${WORKSPACE_DIR}"
-exec xvfb-run -a -e /dev/stderr -s "-screen 0 1024x768x24" "${SERVER_BIN}" \
-  -nosplash \
-  -consoleLog \
-  -vmargs \
-  -Dportfolio.server.port="${PORTFOLIO_SERVER_PORT}" \
-  -Dosgi.instance.area="${WORKSPACE_DIR}"
+
+# Test if we can get java version from the JVM in the server
+echo "Testing Java runtime..."
+if [ -f "${SERVER_DIR}/jre/bin/java" ]; then
+  "${SERVER_DIR}/jre/bin/java" -version 2>&1 || echo "Warning: Could not get Java version"
+elif compgen -G "${SERVER_DIR}/plugins/org.eclipse.justj.openjdk.hotspot.jre.full.linux.x86_64_*/jre/bin/java" > /dev/null; then
+  echo "Found embedded JRE in plugins"
+  ls -la "${SERVER_DIR}/plugins/" | grep -i jre || true
+fi
+
+# Check if stdbuf is available
+if ! command -v stdbuf &> /dev/null; then
+  echo "Warning: stdbuf not found, output may be buffered"
+fi
+
+echo "Starting server process..."
+echo "====================================="
+
+# Use stdbuf to force unbuffered output from both stdout and stderr
+# This ensures we see Java output immediately
+if command -v stdbuf &> /dev/null; then
+  exec stdbuf -oL -eL xvfb-run -a -e /dev/stderr -s "-screen 0 1024x768x24" \
+    "${SERVER_BIN}" \
+    -nosplash \
+    -consoleLog \
+    -vmargs \
+    -Dportfolio.server.port="${PORTFOLIO_SERVER_PORT}" \
+    -Dosgi.instance.area="${WORKSPACE_DIR}"
+else
+  # Fallback without stdbuf
+  exec xvfb-run -a -e /dev/stderr -s "-screen 0 1024x768x24" \
+    "${SERVER_BIN}" \
+    -nosplash \
+    -consoleLog \
+    -vmargs \
+    -Dportfolio.server.port="${PORTFOLIO_SERVER_PORT}" \
+    -Dosgi.instance.area="${WORKSPACE_DIR}"
+fi
 

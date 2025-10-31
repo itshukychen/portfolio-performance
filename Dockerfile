@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates wget \
     fonts-dejavu-core \
     net-tools procps \
+    coreutils \
     libgtk-3-0 libgtk-3-bin \
     libxtst6 \
     libgl1 \
