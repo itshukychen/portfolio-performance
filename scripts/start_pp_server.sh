@@ -5,7 +5,6 @@ set -Eeuo pipefail
 
 # Unbuffer output immediately
 export PYTHONUNBUFFERED=1
-export DISPLAY="${DISPLAY:-:0}"
 
 SERVER_DIR="/opt/pp/server/portfolio-server"
 SERVER_BIN="${SERVER_DIR}/PortfolioPerformanceServer"
@@ -40,52 +39,91 @@ echo "  Workspace: ${WORKSPACE_DIR}"
 echo "  Portfolio Directory: ${PORTFOLIO_DIR:-}"
 echo "  Server Binary: ${SERVER_BIN}"
 
-# Ensure workspace directory exists
+# Ensure workspace directory exists with proper permissions
 mkdir -p "${WORKSPACE_DIR}"
+chmod -R 755 "${WORKSPACE_DIR}" 2>/dev/null || true
 
-# Clean up any stale X11 lock files
+# Clean up any stale workspace locks and X11 files
+echo "Cleaning up stale locks and temporary files..."
+rm -f "${WORKSPACE_DIR}/.metadata/.lock" 2>/dev/null || true
 rm -f /tmp/.X*-lock /tmp/.X11-unix/X* 2>/dev/null || true
+rm -rf /tmp/.ICE-unix/* /tmp/.X11-unix/* 2>/dev/null || true
 
-# Run server with xvfb (virtual X server for headless SWT)
-# Using -a flag to automatically choose display number
-echo "Launching xvfb-run..."
-echo "Command: xvfb-run -a -e /dev/stderr -s \"-screen 0 1024x768x24\" ${SERVER_BIN} -nosplash -consoleLog -vmargs -Dportfolio.server.port=${PORTFOLIO_SERVER_PORT} -Dosgi.instance.area=${WORKSPACE_DIR}"
+# Wait a moment for filesystem to settle (race condition fix)
+sleep 1
 
-# Test if we can get java version from the JVM in the server
-echo "Testing Java runtime..."
-if [ -f "${SERVER_DIR}/jre/bin/java" ]; then
-  "${SERVER_DIR}/jre/bin/java" -version 2>&1 || echo "Warning: Could not get Java version"
-elif compgen -G "${SERVER_DIR}/plugins/org.eclipse.justj.openjdk.hotspot.jre.full.linux.x86_64_*/jre/bin/java" > /dev/null; then
-  echo "Found embedded JRE in plugins"
-  ls -la "${SERVER_DIR}/plugins/" | grep -i jre || true
+# Check if there's a previous workspace log that might have error info
+WORKSPACE_LOG="${WORKSPACE_DIR}/.metadata/.log"
+if [ -f "${WORKSPACE_LOG}" ]; then
+  echo "Found existing workspace log, showing last 10 lines:"
+  tail -n 10 "${WORKSPACE_LOG}" 2>/dev/null || true
+  echo "-------------------------------------"
 fi
 
-# Check if stdbuf is available
-if ! command -v stdbuf &> /dev/null; then
-  echo "Warning: stdbuf not found, output may be buffered"
+# Cleanup function for Xvfb
+cleanup_xvfb() {
+  echo "Cleaning up Xvfb (PID: ${XVFB_PID:-none})..."
+  if [ -n "${XVFB_PID:-}" ]; then
+    kill ${XVFB_PID} 2>/dev/null || true
+    wait ${XVFB_PID} 2>/dev/null || true
+  fi
+}
+
+# Set trap to cleanup Xvfb on exit
+trap cleanup_xvfb EXIT TERM INT
+
+# Start Xvfb manually for better control and visibility
+export DISPLAY=:99
+echo "Starting Xvfb on display ${DISPLAY}..."
+Xvfb ${DISPLAY} -screen 0 1024x768x24 -ac +extension GLX +render -noreset 2>&1 &
+XVFB_PID=$!
+echo "Xvfb started with PID ${XVFB_PID}"
+
+# Wait for Xvfb to be ready
+echo "Waiting for X server to be ready..."
+for i in {1..10}; do
+  if xdpyinfo -display ${DISPLAY} >/dev/null 2>&1; then
+    echo "X server ready after ${i} seconds!"
+    break
+  fi
+  if [ $i -eq 10 ]; then
+    echo "ERROR: X server did not become ready after 10 seconds" >&2
+    ps aux | grep Xvfb || true
+    exit 1
+  fi
+  sleep 1
+done
+
+# Verify X server is still running
+if ! ps -p ${XVFB_PID} > /dev/null 2>&1; then
+  echo "ERROR: Xvfb process died" >&2
+  exit 1
 fi
 
-echo "Starting server process..."
+echo "====================================="
+echo "Starting Portfolio Performance Server..."
 echo "====================================="
 
-# Use stdbuf to force unbuffered output from both stdout and stderr
-# This ensures we see Java output immediately
-if command -v stdbuf &> /dev/null; then
-  exec stdbuf -oL -eL xvfb-run -a -e /dev/stderr -s "-screen 0 1024x768x24" \
-    "${SERVER_BIN}" \
-    -nosplash \
-    -consoleLog \
-    -vmargs \
-    -Dportfolio.server.port="${PORTFOLIO_SERVER_PORT}" \
-    -Dosgi.instance.area="${WORKSPACE_DIR}"
-else
-  # Fallback without stdbuf
-  exec xvfb-run -a -e /dev/stderr -s "-screen 0 1024x768x24" \
-    "${SERVER_BIN}" \
-    -nosplash \
-    -consoleLog \
-    -vmargs \
-    -Dportfolio.server.port="${PORTFOLIO_SERVER_PORT}" \
-    -Dosgi.instance.area="${WORKSPACE_DIR}"
-fi
+# Run the server with all output unbuffered and visible
+# Add OSGi console for debugging
+set -x  # Enable command tracing
+"${SERVER_BIN}" \
+  -nosplash \
+  -consoleLog \
+  -debug \
+  -vmargs \
+  -Dportfolio.server.port="${PORTFOLIO_SERVER_PORT}" \
+  -Dosgi.instance.area="${WORKSPACE_DIR}" \
+  -Dosgi.console.enable.builtin=true \
+  < /dev/null &
+
+SERVER_PID=$!
+echo "Server started with PID ${SERVER_PID}"
+
+# Wait for server and monitor it
+wait ${SERVER_PID}
+SERVER_EXIT=$?
+
+echo "Server exited with code ${SERVER_EXIT}"
+exit ${SERVER_EXIT}
 
