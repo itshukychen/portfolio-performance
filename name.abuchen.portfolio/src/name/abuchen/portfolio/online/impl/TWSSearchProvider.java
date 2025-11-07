@@ -185,7 +185,7 @@ public class TWSSearchProvider implements SecuritySearchProvider
         {
             // Query TWS API to get live price and verify the security exists
             @SuppressWarnings("nls")
-            WebAccess webaccess = new WebAccess(serverHost, "/live-price-by-isin")
+            WebAccess webaccess = new WebAccess(serverHost, "/live-price")
                             .withScheme("http")
                             .withPort(Integer.parseInt(serverPort))
                             .addParameter("isin", isin);

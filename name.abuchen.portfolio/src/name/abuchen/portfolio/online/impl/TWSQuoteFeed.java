@@ -138,7 +138,7 @@ public final class TWSQuoteFeed implements QuoteFeed
             String currency = security.getCurrencyCode() != null ? security.getCurrencyCode() : "USD"; //$NON-NLS-1$
             
             @SuppressWarnings("nls")
-            WebAccess webaccess = new WebAccess(serverHost, "/live-price-by-isin")
+            WebAccess webaccess = new WebAccess(serverHost, "/live-price")
                             .withScheme("http")
                             .withPort(Integer.parseInt(serverPort))
                             .addParameter("isin", security.getIsin())
