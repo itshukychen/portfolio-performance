@@ -1,7 +1,11 @@
 name: Build & Push (API)
 on:
   push:
-    branches: [ master ]
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
   workflow_dispatch:
 
 jobs:
@@ -25,7 +29,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
           platforms: linux/amd64
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.sha }}
@@ -35,6 +39,7 @@ jobs:
         run: echo "Digest is ${{ steps.bp.outputs.digest }}"
       
       - name: Notify ops repo
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.OPSPROD_DISPATCH_TOKEN }}
@@ -48,6 +53,7 @@ jobs:
             }
       
       - name: Notify ops repo
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.OPSPROD_DISPATCH_TOKEN }}
