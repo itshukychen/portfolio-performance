@@ -2,6 +2,7 @@ package name.abuchen.portfolio.ui.api.controller;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,7 @@ import name.abuchen.portfolio.model.SecurityPrice;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.ui.api.dto.SecurityPriceDto;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
+import name.abuchen.portfolio.ui.api.service.SecurityPerformanceSnapshotCacheService;
 
 /**
  * REST Controller for security price operations.
@@ -44,6 +46,8 @@ public class PriceController {
     
     // Use static singleton to ensure cache is shared across all API calls
     private static final PortfolioFileService portfolioFileService = PortfolioFileService.getInstance();
+    private static final SecurityPerformanceSnapshotCacheService securitySnapshotCacheService = SecurityPerformanceSnapshotCacheService
+            .getInstance();
     
     /**
      * Helper method to create error responses with consistent structure.
@@ -219,6 +223,7 @@ public class PriceController {
             
             // Save the portfolio file after the update
             portfolioFileService.saveFile(portfolioId);
+            securitySnapshotCacheService.handlePriceUpdate(portfolioId, Collections.singleton(securityUuid));
             
             logger.info("Price {} for security {} ({}) on date {}", 
                 wasAdded ? "added/updated" : "unchanged", 
@@ -332,6 +337,7 @@ public class PriceController {
             
             // Save the portfolio file after the update
             portfolioFileService.saveFile(portfolioId);
+            securitySnapshotCacheService.handlePriceUpdate(portfolioId, Collections.singleton(securityUuid));
             
             logger.info("Price updated for security {} ({}) on date {} from {} to {}", 
                 security.getName(), securityUuid, priceDate, 
@@ -433,6 +439,7 @@ public class PriceController {
             
             // Save the portfolio file after the update
             portfolioFileService.saveFile(portfolioId);
+            securitySnapshotCacheService.handlePriceUpdate(portfolioId, Collections.singleton(securityUuid));
             
             logger.info("Price deleted for security {} ({}) on date {} (value was {})", 
                 security.getName(), securityUuid, priceDate, deletedValue);

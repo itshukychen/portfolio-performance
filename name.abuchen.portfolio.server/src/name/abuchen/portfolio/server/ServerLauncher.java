@@ -18,6 +18,7 @@ import name.abuchen.portfolio.money.ExchangeRateProvider;
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.impl.ECBExchangeRateProvider;
 import name.abuchen.portfolio.ui.api.PortfolioApiServer;
+import name.abuchen.portfolio.ui.api.redis.RedisPriceUpdateListener;
 import name.abuchen.portfolio.ui.api.service.PortfolioFileService;
 import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
 import name.abuchen.portfolio.ui.api.service.ScheduledPriceUpdateService;
@@ -37,6 +38,7 @@ public class ServerLauncher implements IApplication
     
     private PortfolioApiServer apiServer;
     private ScheduledPriceUpdateService scheduledPriceUpdateService;
+    private RedisPriceUpdateListener redisPriceUpdateListener;
     private volatile boolean running = true;
 
     @Override
@@ -72,6 +74,8 @@ public class ServerLauncher implements IApplication
                 
                 // Start the scheduled price and exchange rate update service
                 startScheduledPriceUpdateService();
+
+                startRedisPriceListener();
                 
                 PortfolioLog.info("📋 Press Ctrl+C to stop the server");
             }
@@ -114,6 +118,20 @@ public class ServerLauncher implements IApplication
         if (scheduledPriceUpdateService != null)
         {
             scheduledPriceUpdateService.stop();
+        }
+
+        if (redisPriceUpdateListener != null)
+        {
+            try
+            {
+                redisPriceUpdateListener.stop();
+            }
+            catch (Exception e)
+            {
+                PortfolioLog.error("❌ Failed to stop Redis price listener: " + e.getMessage());
+                PortfolioLog.error(e);
+            }
+            redisPriceUpdateListener = null;
         }
         
         // Save exchange rates before shutdown
@@ -339,6 +357,21 @@ public class ServerLauncher implements IApplication
         catch (Exception e)
         {
             PortfolioLog.error("❌ Failed to start scheduled update service: " + e.getMessage());
+            PortfolioLog.error(e);
+        }
+    }
+
+    private void startRedisPriceListener()
+    {
+        try
+        {
+            redisPriceUpdateListener = new RedisPriceUpdateListener();
+            redisPriceUpdateListener.start();
+            PortfolioLog.info("✅ Redis price listener started");
+        }
+        catch (Exception e)
+        {
+            PortfolioLog.error("❌ Failed to start Redis price listener: " + e.getMessage());
             PortfolioLog.error(e);
         }
     }

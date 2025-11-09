@@ -412,7 +412,7 @@ public final class SecurityPerformanceRecord extends BaseSecurityPerformanceReco
     }
 
     @SafeVarargs
-    /* package */ final void calculate(Class<? extends SecurityPerformanceIndicator>... indicators)
+    public final void calculate(Class<? extends SecurityPerformanceIndicator>... indicators)
     {
         Set<Class<? extends SecurityPerformanceIndicator>> flags = new HashSet<>();
         Arrays.stream(indicators).forEach(flags::add);

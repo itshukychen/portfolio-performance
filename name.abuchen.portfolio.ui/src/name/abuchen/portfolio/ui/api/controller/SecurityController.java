@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import javax.ws.rs.Consumes;
@@ -28,9 +27,8 @@ import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.Quote;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.snapshot.security.SecurityPerformanceRecord;
-import name.abuchen.portfolio.snapshot.security.SecurityPerformanceSnapshot;
 import name.abuchen.portfolio.ui.api.dto.SecurityDto;
-import name.abuchen.portfolio.util.Interval;
+import name.abuchen.portfolio.ui.api.service.SecurityPerformanceSnapshotCacheService.SecurityPerformanceSnapshotBundle;
 
 /**
  * REST Controller for security operations.
@@ -39,13 +37,6 @@ import name.abuchen.portfolio.util.Interval;
  */
 @Path("/api/v1/portfolios/{portfolioId}/securities")
 public class SecurityController extends BaseController {
-    
-    // Cache for performance snapshots per portfolio
-    // Key: portfolioId, Value: SecurityPerformanceSnapshots
-    private static final Map<String, SecurityPerformanceSnapshots> SNAPSHOTS_CACHE = new ConcurrentHashMap<>();
-    
-    // Cache for last update time to invalidate cache when portfolio changes
-    private static final Map<String, Long> CACHE_TIMESTAMPS = new ConcurrentHashMap<>();
     
     /**
      * Get all active securities in a portfolio.
@@ -75,8 +66,10 @@ public class SecurityController extends BaseController {
             }
             
             // Get or create cached performance snapshots for this portfolio
-            SecurityPerformanceSnapshots snapshots = getOrCreatePerformanceSnapshots(portfolioId, client);
+            SecurityPerformanceSnapshotBundle snapshots = securitySnapshotCacheService.getSnapshots(portfolioId,
+                client);
             
+            logger.debug("Got security performance snapshots for portfolio {} - {}", portfolioId, snapshots);
             // Get all securities (filter out retired securities and options contracts)
             List<SecurityDto> securities = client.getSecurities().stream()
                 .filter(security -> !security.isRetired()) // Skip retired securities
@@ -148,7 +141,8 @@ public class SecurityController extends BaseController {
             }
             
             // Get or create cached performance snapshots for this portfolio
-            SecurityPerformanceSnapshots snapshots = getOrCreatePerformanceSnapshots(portfolioId, client);
+            SecurityPerformanceSnapshotBundle snapshots = securitySnapshotCacheService.getSnapshots(portfolioId,
+                client);
             
             // Convert to DTO
             SecurityDto securityDto = convertSecurityToDto(security, client, snapshots);
@@ -247,61 +241,11 @@ public class SecurityController extends BaseController {
     }
     
     /**
-     * Helper class to hold the three performance snapshots we need
-     */
-    private static class SecurityPerformanceSnapshots {
-        final SecurityPerformanceSnapshot allTime;
-        final SecurityPerformanceSnapshot ytd;
-        final SecurityPerformanceSnapshot daily;
-        
-        SecurityPerformanceSnapshots(SecurityPerformanceSnapshot allTime, 
-                                    SecurityPerformanceSnapshot ytd, 
-                                    SecurityPerformanceSnapshot daily) {
-            this.allTime = allTime;
-            this.ytd = ytd;
-            this.daily = daily;
-        }
-    }
-    
-    /**
-     * Get or create cached performance snapshots for a portfolio.
-     * This method implements caching to avoid recreating snapshots on every API call.
-     * Cache is invalidated when the portfolio is updated.
-     */
-    private SecurityPerformanceSnapshots getOrCreatePerformanceSnapshots(String portfolioId, Client client) {
-        // Check if we have cached snapshots for this portfolio
-        SecurityPerformanceSnapshots cachedSnapshots = SNAPSHOTS_CACHE.get(portfolioId);
-        
-        // Check if cache is still valid (use a simple time-based cache with 5 minute TTL)
-        Long lastCacheTime = CACHE_TIMESTAMPS.get(portfolioId);
-        long currentTime = System.currentTimeMillis();
-        long cacheTTL = 5 * 60 * 1000; // 5 minutes in milliseconds
-        
-        if (cachedSnapshots != null && lastCacheTime != null && 
-            (currentTime - lastCacheTime) < cacheTTL) {
-            logger.debug("Using cached performance snapshots for portfolio: {}", portfolioId);
-            return cachedSnapshots;
-        }
-        
-        // Create new snapshots and cache them
-        logger.info("Creating new performance snapshots for portfolio: {}", portfolioId);
-        SecurityPerformanceSnapshots snapshots = createPerformanceSnapshots(client);
-        
-        // Cache the snapshots
-        SNAPSHOTS_CACHE.put(portfolioId, snapshots);
-        CACHE_TIMESTAMPS.put(portfolioId, currentTime);
-        
-        return snapshots;
-    }
-    
-    /**
      * Clear the performance snapshots cache for a specific portfolio.
      * This should be called when the portfolio is updated.
      */
     public static void clearCache(String portfolioId) {
-        SNAPSHOTS_CACHE.remove(portfolioId);
-        CACHE_TIMESTAMPS.remove(portfolioId);
-        logger.info("Cleared performance snapshots cache for portfolio: {}", portfolioId);
+        securitySnapshotCacheService.handlePortfolioUpdate(portfolioId);
     }
     
     /**
@@ -309,52 +253,7 @@ public class SecurityController extends BaseController {
      * This can be called during application shutdown or when memory is needed.
      */
     public static void clearAllCache() {
-        SNAPSHOTS_CACHE.clear();
-        CACHE_TIMESTAMPS.clear();
-        logger.info("Cleared all performance snapshots cache");
-    }
-    
-    /**
-     * Create performance snapshots for a client.
-     * This is called when cache is invalid or doesn't exist.
-     */
-    private SecurityPerformanceSnapshots createPerformanceSnapshots(Client client) {
-        try {
-            // Create currency converter for the client
-            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
-            CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
-            
-            LocalDate today = LocalDate.now();
-            
-            // Create interval for all time (to get current holdings)
-            LocalDate startDate = LocalDate.of(1900, 1, 1);
-            Interval allTimeInterval = Interval.of(startDate, today);
-            
-            // Create interval for YTD
-            LocalDate yearStart = LocalDate.of(today.getYear(), 1, 1);
-            Interval ytdInterval = Interval.of(yearStart.minusDays(1), today);
-            
-            // Create interval for daily
-            LocalDate yesterday = today.minusDays(1);
-            Interval dailyInterval = Interval.of(yesterday.minusDays(1), today);
-            
-            // Create all three snapshots once
-            SecurityPerformanceSnapshot allTimeSnapshot = SecurityPerformanceSnapshot.create(
-                client, converter, allTimeInterval);
-            SecurityPerformanceSnapshot ytdSnapshot = SecurityPerformanceSnapshot.create(
-                client, converter, ytdInterval);
-            SecurityPerformanceSnapshot dailySnapshot = SecurityPerformanceSnapshot.create(
-                client, converter, dailyInterval);
-            
-            // Return the snapshots wrapper
-            return new SecurityPerformanceSnapshots(
-                allTimeSnapshot, ytdSnapshot, dailySnapshot);
-            
-        } catch (Exception e) {
-            logger.error("Failed to create performance snapshots: {}", e.getMessage(), e);
-            // Return empty snapshots on error
-            return new SecurityPerformanceSnapshots(null, null, null);
-        }
+        securitySnapshotCacheService.clearAll();
     }
     
     /**
@@ -362,7 +261,7 @@ public class SecurityController extends BaseController {
      * Aligned with PortfolioFileService.loadSecurities()
      */
     private SecurityDto convertSecurityToDto(Security security, Client client, 
-                                            SecurityPerformanceSnapshots snapshots) {
+                                            SecurityPerformanceSnapshotBundle snapshots) {
         SecurityDto dto = new SecurityDto();
         dto.setUuid(security.getUUID());
         dto.setName(security.getName());
@@ -410,9 +309,6 @@ public class SecurityController extends BaseController {
                     double priceChange = (todayValue - previousValue) / (double) Values.Quote.factor();
                     dto.setDailyPriceChange(priceChange);
                 }
-            } else {
-                logger.info("No latest two prices available for security: {} - cannot calculate daily price change", 
-                    security.getName());
             }
         } catch (Exception e) {
             logger.warn("Failed to get daily price change for security {}: {}", 
@@ -436,10 +332,10 @@ public class SecurityController extends BaseController {
      * - Total earnings (dividends)
      */
     private void calculateHoldingsData(SecurityDto dto, Security security, Client client, 
-                                      SecurityPerformanceSnapshots snapshots) {
+                                      SecurityPerformanceSnapshotBundle snapshots) {
         try {
             // Check if snapshots are available
-            if (snapshots == null || snapshots.allTime == null) {
+            if (snapshots == null || snapshots.allTime() == null) {
                 logger.warn("No performance snapshots available for security: {}", security.getName());
                 return;
             }
@@ -451,7 +347,7 @@ public class SecurityController extends BaseController {
             LocalDate today = LocalDate.now();
             
             // Get all-time performance record
-            Optional<SecurityPerformanceRecord> recordOpt = snapshots.allTime.getRecord(security);
+            Optional<SecurityPerformanceRecord> recordOpt = snapshots.allTime().getRecord(security);
             
             if (recordOpt.isPresent()) {
                 SecurityPerformanceRecord record = recordOpt.get();
@@ -493,14 +389,10 @@ public class SecurityController extends BaseController {
                     Money gainsInBase = converter.convert(today, capitalGains);
                     dto.setUnrealizedGainsAllTime(gainsInBase.getAmount() / Values.Money.factor());
                 }
-            } else {
-                logger.info("All-time performance record not present for security: {} ({})", 
-                    security.getName(), security.getUUID());
             }
             
             // Get YTD performance record
-            Optional<SecurityPerformanceRecord> ytdRecordOpt = snapshots.ytd.getRecord(security);
-            
+            Optional<SecurityPerformanceRecord> ytdRecordOpt = snapshots.yearToDate().getRecord(security);
             if (ytdRecordOpt.isPresent()) {
                 SecurityPerformanceRecord ytdRecord = ytdRecordOpt.get();
                 Money capitalGains = ytdRecord.getCapitalGainsOnHoldings();
@@ -508,14 +400,10 @@ public class SecurityController extends BaseController {
                     Money gainsInBase = converter.convert(today, capitalGains);
                     dto.setUnrealizedGainsYTD(gainsInBase.getAmount() / Values.Money.factor());
                 }
-            } else {
-                logger.info("YTD performance record not present for security: {} ({})", 
-                    security.getName(), security.getUUID());
             }
             
             // Get daily performance record
-            Optional<SecurityPerformanceRecord> dailyRecordOpt = snapshots.daily.getRecord(security);
-            
+            Optional<SecurityPerformanceRecord> dailyRecordOpt = snapshots.daily().getRecord(security);
             if (dailyRecordOpt.isPresent()) {
                 SecurityPerformanceRecord dailyRecord = dailyRecordOpt.get();
                 Money capitalGains = dailyRecord.getCapitalGainsOnHoldings();

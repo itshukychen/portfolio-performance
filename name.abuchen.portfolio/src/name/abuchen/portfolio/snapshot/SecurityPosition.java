@@ -108,6 +108,12 @@ public class SecurityPosition
         return Money.of(investment.getCurrencyCode(), marketValue);
     }
 
+    public SecurityPosition withPrice(SecurityPrice newPrice)
+    {
+        Objects.requireNonNull(newPrice);
+        return new SecurityPosition(investment, converter, newPrice, shares, new ArrayList<>(transactions));
+    }
+
     public static SecurityPosition split(SecurityPosition position, int weight)
     {
         List<PortfolioTransaction> splitTransactions = new ArrayList<>(position.transactions.size());

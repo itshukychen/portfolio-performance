@@ -38,17 +38,20 @@ import name.abuchen.portfolio.ui.PortfolioPlugin;
 import name.abuchen.portfolio.ui.UIConstants;
 import name.abuchen.portfolio.ui.log.LogEntryCache;
 import name.abuchen.portfolio.ui.update.UpdateHelper;
+import org.eclipse.swt.widgets.Display;
+
+import name.abuchen.portfolio.ui.api.PortfolioApiServer;
+import name.abuchen.portfolio.ui.api.redis.RedisPriceUpdateListener;
+import name.abuchen.portfolio.ui.util.Colors;
 import name.abuchen.portfolio.ui.util.ProgressMonitorFactory;
 import name.abuchen.portfolio.ui.util.RecentFilesCache;
-import name.abuchen.portfolio.ui.util.swt.ActiveShell;
-import name.abuchen.portfolio.ui.api.PortfolioApiServer;
 import name.abuchen.portfolio.ui.util.UI;
-import name.abuchen.portfolio.ui.util.Colors;
-import org.eclipse.swt.widgets.Display;
+import name.abuchen.portfolio.ui.util.swt.ActiveShell;
 
 public class StartupAddon
 {
     private PortfolioApiServer apiServer;
+    private RedisPriceUpdateListener redisPriceListener;
 
     private static final class UpdateExchangeRatesJob extends Job
     {
@@ -277,6 +280,9 @@ public class StartupAddon
     {
         try
         {
+            redisPriceListener = new RedisPriceUpdateListener();
+            redisPriceListener.start();
+
             apiServer = new PortfolioApiServer();
             apiServer.start();
             PortfolioPlugin.log("API Server started - UI thread marshalling is active for SWT access");
@@ -290,6 +296,18 @@ public class StartupAddon
     @PreDestroy
     public void stopApiServer()
     {
+        if (redisPriceListener != null)
+        {
+            try
+            {
+                redisPriceListener.stop();
+            }
+            catch (Exception e)
+            {
+                PortfolioPlugin.log(e);
+            }
+        }
+
         if (apiServer != null)
         {
             try

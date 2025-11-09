@@ -135,6 +135,7 @@ Import-Package: com.google.common.base,
  org.eclipse.swtchart,
  org.eclipse.swtchart.internal,
  org.eclipse.swtchart.model,
+ org.json,
  org.json.simple,
  org.json.simple.parser,
  org.jsoup,
@@ -142,7 +143,9 @@ Import-Package: com.google.common.base,
  org.osgi.framework,
  org.osgi.service.component.annotations,
  org.osgi.service.event,
- org.osgi.service.prefs
+ org.osgi.service.prefs,
+ redis.clients.jedis,
+ redis.clients.jedis.exceptions
 Require-Bundle: name.abuchen.portfolio;bundle-version="0.80.4",
  org.eclipse.nebula.cwt,
  name.abuchen.portfolio.bootstrap;bundle-version="0.80.4",
@@ -158,5 +161,6 @@ Service-Component: OSGI-INF/name.abuchen.portfolio.ui.util.theme.ColorAndFontPro
  OSGI-INF/name.abuchen.portfolio.ui.theme.CustomThemeEngineManager.xml
 Export-Package: name.abuchen.portfolio.ui,
  name.abuchen.portfolio.ui.api,
+ name.abuchen.portfolio.ui.api.redis,
  name.abuchen.portfolio.ui.api.service,
  name.abuchen.portfolio.ui.util
