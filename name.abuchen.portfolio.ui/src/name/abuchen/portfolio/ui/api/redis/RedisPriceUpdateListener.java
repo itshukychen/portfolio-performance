@@ -216,6 +216,7 @@ public class RedisPriceUpdateListener
             Optional<String> isin = readString(payload, "isin");
             Optional<String> symbol = readString(payload, "symbol");
             Optional<Double> priceOpt = readDouble(payload, "price");
+            Optional<String> currency = readString(payload, "currency");
 
             if (priceOpt.isEmpty())
             {
@@ -236,7 +237,13 @@ public class RedisPriceUpdateListener
             LocalDate priceDate = eventInstant.atZone(ZoneId.systemDefault()).toLocalDate();
             double price = priceOpt.orElse(Double.NaN);
 
-            applyPriceUpdate(isin.orElse(null), symbol.orElse(null), price, priceDate, eventInstant);
+            applyPriceUpdate(
+                            isin.orElse(null),
+                            symbol.orElse(null),
+                            currency.orElse(null),
+                            price,
+                            priceDate,
+                            eventInstant);
         }
         catch (JsonSyntaxException e)
         {
@@ -248,7 +255,8 @@ public class RedisPriceUpdateListener
         }
     }
 
-    private void applyPriceUpdate(String isin, String symbol, double price, LocalDate priceDate, Instant eventInstant)
+    private void applyPriceUpdate(String isin, String symbol, String currency, double price, LocalDate priceDate,
+                    Instant eventInstant)
     {
         if (!Double.isFinite(price) || price <= 0d)
         {
@@ -276,7 +284,7 @@ public class RedisPriceUpdateListener
                 if (security == null || security.isRetired())
                     continue;
 
-                if (!matchesSecurity(security, isin, symbol))
+                if (!matchesSecurity(security, isin, symbol, currency))
                     continue;
 
                 if (updateSecurityLatestPrice(security, price, priceDate, eventInstant))
@@ -298,7 +306,8 @@ public class RedisPriceUpdateListener
 
         if (securitiesUpdated == 0 && logger.isDebugEnabled())
         {
-            logger.debug("Price update did not match any cached securities (isin={}, symbol={})", isin, symbol);
+            logger.debug("Price update did not match any cached securities (isin={}, symbol={}, currency={})", isin,
+                            symbol, currency);
         }
     }
 
@@ -316,8 +325,25 @@ public class RedisPriceUpdateListener
         return updated;
     }
 
-    private boolean matchesSecurity(Security security, String isin, String symbol)
+    private boolean matchesSecurity(Security security, String isin, String symbol, String currency)
     {
+        if (currency != null && !currency.isBlank())
+        {
+            String securityCurrency = security.getCurrencyCode();
+            if (securityCurrency != null && !securityCurrency.isBlank())
+            {
+                if (!securityCurrency.equalsIgnoreCase(currency))
+                    return false;
+            }
+            else
+            {
+                String targetCurrency = security.getTargetCurrencyCode();
+                if (targetCurrency == null || targetCurrency.isBlank()
+                                || !targetCurrency.equalsIgnoreCase(currency))
+                    return false;
+            }
+        }
+
         if (isin != null && !isin.isBlank())
         {
             String securityIsin = security.getIsin();
