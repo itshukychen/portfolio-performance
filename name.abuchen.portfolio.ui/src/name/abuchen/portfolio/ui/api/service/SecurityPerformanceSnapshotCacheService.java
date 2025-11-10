@@ -223,10 +223,9 @@ public final class SecurityPerformanceSnapshotCacheService
 
             Interval dailyInterval = Interval.of(today.minusDays(2), today);
 
-            SecurityPerformanceSnapshot allTime = SecurityPerformanceSnapshot.create(client, converter, allTimeInterval);
-            SecurityPerformanceSnapshot yearToDate = SecurityPerformanceSnapshot.create(client, converter,
-                            ytdInterval);
-            SecurityPerformanceSnapshot daily = SecurityPerformanceSnapshot.create(client, converter, dailyInterval);
+            SecurityPerformanceSnapshot allTime = SecurityPerformanceSnapshot.create(client, converter, allTimeInterval, false);
+            SecurityPerformanceSnapshot yearToDate = SecurityPerformanceSnapshot.create(client, converter, ytdInterval, false);
+            SecurityPerformanceSnapshot daily = SecurityPerformanceSnapshot.create(client, converter, dailyInterval, false);
 
             return new SecurityPerformanceSnapshotBundle(allTime, yearToDate, daily);
         }
@@ -269,6 +268,9 @@ public final class SecurityPerformanceSnapshotCacheService
             CalculationLineItem item = lineItems.get(index);
 
             if (!(item instanceof CalculationLineItem.ValuationAtEnd valuation))
+                continue;
+
+            if (!(valuation.getOwner() instanceof Portfolio portfolio))
                 continue;
 
             Optional<SecurityPosition> positionOpt = valuation.getSecurityPosition();

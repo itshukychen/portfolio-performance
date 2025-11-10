@@ -32,8 +32,11 @@ public class SecurityDto {
     private Long totalHoldingValueSecurityCurrency;
     private Long totalHoldingValueBaseCurrency;
     private Long unrealizedGainsAllTime;
+    private Long unrealizedGainsAllTimeSecurityCurrency;
     private Long unrealizedGainsYTD;
+    private Long unrealizedGainsYTDSecurityCurrency;
     private Long unrealizedGainsDaily;
+    private Long unrealizedGainsDailySecurityCurrency;
     private Long totalEarnings;
     
     // Constructors
@@ -220,6 +223,14 @@ public class SecurityDto {
     public void setUnrealizedGainsAllTime(Long unrealizedGainsAllTime) {
         this.unrealizedGainsAllTime = unrealizedGainsAllTime;
     }
+
+    public Long getUnrealizedGainsAllTimeSecurityCurrency() {
+        return unrealizedGainsAllTimeSecurityCurrency;
+    }
+
+    public void setUnrealizedGainsAllTimeSecurityCurrency(Long unrealizedGainsAllTimeSecurityCurrency) {
+        this.unrealizedGainsAllTimeSecurityCurrency = unrealizedGainsAllTimeSecurityCurrency;
+    }
     
     public Long getUnrealizedGainsYTD() {
         return unrealizedGainsYTD;
@@ -228,6 +239,14 @@ public class SecurityDto {
     public void setUnrealizedGainsYTD(Long unrealizedGainsYTD) {
         this.unrealizedGainsYTD = unrealizedGainsYTD;
     }
+
+    public Long getUnrealizedGainsYTDSecurityCurrency() {
+        return unrealizedGainsYTDSecurityCurrency;
+    }
+
+    public void setUnrealizedGainsYTDSecurityCurrency(Long unrealizedGainsYTDSecurityCurrency) {
+        this.unrealizedGainsYTDSecurityCurrency = unrealizedGainsYTDSecurityCurrency;
+    }
     
     public Long getUnrealizedGainsDaily() {
         return unrealizedGainsDaily;
@@ -235,6 +254,14 @@ public class SecurityDto {
     
     public void setUnrealizedGainsDaily(Long unrealizedGainsDaily) {
         this.unrealizedGainsDaily = unrealizedGainsDaily;
+    }
+
+    public Long getUnrealizedGainsDailySecurityCurrency() {
+        return unrealizedGainsDailySecurityCurrency;
+    }
+
+    public void setUnrealizedGainsDailySecurityCurrency(Long unrealizedGainsDailySecurityCurrency) {
+        this.unrealizedGainsDailySecurityCurrency = unrealizedGainsDailySecurityCurrency;
     }
     
     public Long getTotalEarnings() {

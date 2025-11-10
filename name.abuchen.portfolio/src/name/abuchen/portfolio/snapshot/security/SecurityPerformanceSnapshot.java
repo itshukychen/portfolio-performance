@@ -17,8 +17,15 @@ public class SecurityPerformanceSnapshot
     public static SecurityPerformanceSnapshot create(Client client, CurrencyConverter converter, Interval interval,
                     Class<? extends SecurityPerformanceIndicator>... indicators)
     {
-        var records = new SecurityPerformanceSnapshotBuilder<SecurityPerformanceRecord>(client, converter, interval)
-                        .create(SecurityPerformanceRecord.class);
+        return create(client, converter, interval, true, indicators);
+    }
+
+    @SafeVarargs
+    public static SecurityPerformanceSnapshot create(Client client, CurrencyConverter converter, Interval interval,
+                    boolean enforceBaseCurrency, Class<? extends SecurityPerformanceIndicator>... indicators)
+    {
+        var records = new SecurityPerformanceSnapshotBuilder<SecurityPerformanceRecord>(client, converter, interval,
+                        enforceBaseCurrency).create(SecurityPerformanceRecord.class);
 
         return doCreateSnapshot(records, indicators);
     }
@@ -26,7 +33,13 @@ public class SecurityPerformanceSnapshot
     public static SecurityPerformanceSnapshot create(Client client, CurrencyConverter converter, Portfolio portfolio,
                     Interval interval)
     {
-        return create(new PortfolioClientFilter(portfolio).filter(client), converter, interval);
+        return create(client, converter, portfolio, interval, true);
+    }
+
+    public static SecurityPerformanceSnapshot create(Client client, CurrencyConverter converter, Portfolio portfolio,
+                    Interval interval, boolean enforceBaseCurrency)
+    {
+        return create(new PortfolioClientFilter(portfolio).filter(client), converter, interval, enforceBaseCurrency);
     }
 
     @SafeVarargs
@@ -34,8 +47,16 @@ public class SecurityPerformanceSnapshot
                     ClientSnapshot valuationAtStart, ClientSnapshot valuationAtEnd,
                     Class<? extends SecurityPerformanceIndicator>... indicators)
     {
-        var records = new SecurityPerformanceSnapshotBuilder<SecurityPerformanceRecord>(client, converter, interval)
-                        .create(SecurityPerformanceRecord.class, valuationAtStart, valuationAtEnd);
+        return create(client, converter, interval, true, valuationAtStart, valuationAtEnd, indicators);
+    }
+
+    @SafeVarargs
+    public static SecurityPerformanceSnapshot create(Client client, CurrencyConverter converter, Interval interval,
+                    boolean enforceBaseCurrency, ClientSnapshot valuationAtStart, ClientSnapshot valuationAtEnd,
+                    Class<? extends SecurityPerformanceIndicator>... indicators)
+    {
+        var records = new SecurityPerformanceSnapshotBuilder<SecurityPerformanceRecord>(client, converter, interval,
+                        enforceBaseCurrency).create(SecurityPerformanceRecord.class, valuationAtStart, valuationAtEnd);
         return doCreateSnapshot(records, indicators);
     }
 

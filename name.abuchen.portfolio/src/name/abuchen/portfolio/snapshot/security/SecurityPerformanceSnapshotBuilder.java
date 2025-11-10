@@ -23,12 +23,20 @@ import name.abuchen.portfolio.util.Interval;
     private final Client client;
     private final CurrencyConverter converter;
     private final Interval interval;
+    private final boolean enforceBaseCurrency;
 
     public SecurityPerformanceSnapshotBuilder(Client client, CurrencyConverter converter, Interval interval)
+    {
+        this(client, converter, interval, true);
+    }
+
+    public SecurityPerformanceSnapshotBuilder(Client client, CurrencyConverter converter, Interval interval,
+                    boolean enforceBaseCurrency)
     {
         this.client = client;
         this.converter = converter;
         this.interval = interval;
+        this.enforceBaseCurrency = enforceBaseCurrency;
     }
 
     public List<T> create(Class<T> type)
@@ -97,7 +105,7 @@ import name.abuchen.portfolio.util.Interval;
 
             for (Security s : client.getSecurities())
             {
-                records.put(s, typeConstructor.newInstance(client, s, converter, interval));
+                records.put(s, typeConstructor.newInstance(client, s, converterFor(s), interval));
             }
         }
         catch (ReflectiveOperationException e)
@@ -151,13 +159,18 @@ import name.abuchen.portfolio.util.Interval;
                             {
                                 var typeConstructor = type.getDeclaredConstructor(Client.class, Security.class,
                                                 CurrencyConverter.class, Interval.class);
-                                return typeConstructor.newInstance(client, s, converter, interval);
+                                return typeConstructor.newInstance(client, s, converterFor(s), interval);
                             }
                             catch (ReflectiveOperationException e)
                             {
                                 throw new IllegalArgumentException(e);
                             }
                         }).addLineItem(CalculationLineItem.of(portfolio, t)));
+    }
+
+    private CurrencyConverter converterFor(Security security)
+    {
+        return enforceBaseCurrency ? converter : converter.with(security.getCurrencyCode());
     }
 
     private void addPseudoValuationTansactions(Portfolio portfolio, Map<Security, T> records)

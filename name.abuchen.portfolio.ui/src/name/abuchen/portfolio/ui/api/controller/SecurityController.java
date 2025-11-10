@@ -26,6 +26,7 @@ import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
 import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.Quote;
 import name.abuchen.portfolio.money.Values;
+import name.abuchen.portfolio.snapshot.security.CapitalGainsRecord;
 import name.abuchen.portfolio.snapshot.security.SecurityPerformanceRecord;
 import name.abuchen.portfolio.ui.api.dto.SecurityDto;
 import name.abuchen.portfolio.ui.api.service.SecurityPerformanceSnapshotCacheService.SecurityPerformanceSnapshotBundle;
@@ -291,30 +292,6 @@ public class SecurityController extends BaseController {
                 security.getName(), e.getMessage());
         }
         
-        // Set the daily price change
-        try {
-            java.util.Optional<name.abuchen.portfolio.util.Pair<name.abuchen.portfolio.model.SecurityPrice, 
-                name.abuchen.portfolio.model.SecurityPrice>> latestTwoPrices = 
-                security.getLatestTwoSecurityPrices();
-            
-            if (latestTwoPrices.isPresent()) {
-                name.abuchen.portfolio.util.Pair<name.abuchen.portfolio.model.SecurityPrice, 
-                    name.abuchen.portfolio.model.SecurityPrice> prices = latestTwoPrices.get();
-                name.abuchen.portfolio.model.SecurityPrice todayPrice = prices.getLeft();
-                name.abuchen.portfolio.model.SecurityPrice previousPrice = prices.getRight();
-            
-                if (todayPrice != null && previousPrice != null) {
-                    long todayValue = todayPrice.getValue();
-                    long previousValue = previousPrice.getValue();
-                    double priceChange = (todayValue - previousValue) / (double) Values.Quote.factor();
-                    dto.setDailyPriceChange(priceChange);
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to get daily price change for security {}: {}", 
-                security.getName(), e.getMessage(), e);
-        }
-        
         // Calculate holdings data using pre-created snapshots
         calculateHoldingsData(dto, security, client, snapshots);
         
@@ -342,7 +319,8 @@ public class SecurityController extends BaseController {
             
             // Create currency converter for the client
             ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
-            CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+            CurrencyConverter baseConverter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+            CurrencyConverter securityCurrencyConverter = new CurrencyConverterImpl(factory, security.getCurrencyCode());
             
             LocalDate today = LocalDate.now();
             
@@ -370,8 +348,7 @@ public class SecurityController extends BaseController {
                     dto.setTotalHoldingValueBaseCurrency(marketValueInBase.getAmount() / Values.Money.factor());
                     
                     // Convert back to security currency
-                    CurrencyConverter reverseConverter = new CurrencyConverterImpl(factory, security.getCurrencyCode());
-                    Money marketValueInSecurityCurrency = reverseConverter.convert(today, marketValueInBase);
+                    Money marketValueInSecurityCurrency = securityCurrencyConverter.convert(today, marketValueInBase);
                     dto.setTotalHoldingValueSecurityCurrency(marketValueInSecurityCurrency.getAmount() / Values.Money.factor());
                 }
                 
@@ -379,37 +356,45 @@ public class SecurityController extends BaseController {
                 Money sumOfDividends = record.getSumOfDividends();
                 if (sumOfDividends != null) {
                     // Convert to base currency
-                    Money dividendsInBase = converter.convert(today, sumOfDividends);
+                    Money dividendsInBase = baseConverter.convert(today, sumOfDividends);
                     dto.setTotalEarnings(dividendsInBase.getAmount() / Values.Money.factor());
                 }
                 
                 // Set all-time unrealized gains
-                Money capitalGains = record.getCapitalGainsOnHoldings();
-                if (capitalGains != null) {
-                    Money gainsInBase = converter.convert(today, capitalGains);
-                    dto.setUnrealizedGainsAllTime(gainsInBase.getAmount() / Values.Money.factor());
-                }
+                Money capitalGainsSecurityCurrency = record.getCapitalGainsOnHoldings();
+                Money capitalGainsBaseCurrency = baseConverter.convert(today, capitalGainsSecurityCurrency);
+                dto.setUnrealizedGainsAllTimeSecurityCurrency(
+                                capitalGainsSecurityCurrency.getAmount() / Values.Money.factor());
+                dto.setUnrealizedGainsAllTime(capitalGainsBaseCurrency.getAmount() / Values.Money.factor());
+                
             }
             
             // Get YTD performance record
             Optional<SecurityPerformanceRecord> ytdRecordOpt = snapshots.yearToDate().getRecord(security);
             if (ytdRecordOpt.isPresent()) {
                 SecurityPerformanceRecord ytdRecord = ytdRecordOpt.get();
-                Money capitalGains = ytdRecord.getCapitalGainsOnHoldings();
-                if (capitalGains != null) {
-                    Money gainsInBase = converter.convert(today, capitalGains);
-                    dto.setUnrealizedGainsYTD(gainsInBase.getAmount() / Values.Money.factor());
-                }
+                // Set YTD unrealized gains
+                Money capitalGainsSecurityCurrency = ytdRecord.getCapitalGainsOnHoldings();
+                Money capitalGainsBaseCurrency = baseConverter.convert(today, capitalGainsSecurityCurrency);
+                dto.setUnrealizedGainsYTDSecurityCurrency(
+                                capitalGainsSecurityCurrency.getAmount() / Values.Money.factor());
+                dto.setUnrealizedGainsYTD(capitalGainsBaseCurrency.getAmount() / Values.Money.factor());
+
             }
             
             // Get daily performance record
             Optional<SecurityPerformanceRecord> dailyRecordOpt = snapshots.daily().getRecord(security);
             if (dailyRecordOpt.isPresent()) {
                 SecurityPerformanceRecord dailyRecord = dailyRecordOpt.get();
-                Money capitalGains = dailyRecord.getCapitalGainsOnHoldings();
-                if (capitalGains != null) {
-                    Money gainsInBase = converter.convert(today, capitalGains);
-                    dto.setUnrealizedGainsDaily(gainsInBase.getAmount() / Values.Money.factor());
+                Money capitalGainsSecurityCurrency = dailyRecord.getCapitalGainsOnHoldings();
+                Money capitalGainsBaseCurrency = baseConverter.convert(today, capitalGainsSecurityCurrency);
+                dto.setUnrealizedGainsDailySecurityCurrency(
+                                capitalGainsSecurityCurrency.getAmount() / Values.Money.factor());
+                dto.setUnrealizedGainsDaily(capitalGainsBaseCurrency.getAmount() / Values.Money.factor());
+
+                double dailyReturn = dailyRecord.getTrueTimeWeightedRateOfReturn();
+                if (Double.isFinite(dailyReturn)) {
+                    dto.setDailyPriceChange(dailyReturn * 100d);
                 }
             }
             
@@ -417,7 +402,6 @@ public class SecurityController extends BaseController {
             // Log error but don't fail the entire DTO conversion
             logger.warn("Failed to calculate holdings data for security {}: {}", 
                 security.getName(), e.getMessage());
-            // Leave holdings fields as null to indicate unavailable data
         }
     }
 }
