@@ -228,7 +228,7 @@ public final class TWSQuoteFeed implements QuoteFeed
             }
 
             @SuppressWarnings("nls")
-            WebAccess webaccess = new WebAccess(serverHost, "/historical-data-by-isin")
+            WebAccess webaccess = new WebAccess(serverHost, "/historical-data")
                             .withScheme("http")
                             .withPort(Integer.parseInt(serverPort))
                             .addParameter("isin", security.getIsin())
