@@ -4,6 +4,8 @@ set -Eeuo pipefail
 # Start Portfolio Performance UI (Desktop GUI)
 
 export DISPLAY="${DISPLAY:-:0}"
+# Disable GTK overlay scrolling to avoid GtkScrollbar warnings
+export GTK_OVERLAY_SCROLLING="${GTK_OVERLAY_SCROLLING:-0}"
 
 UI_BIN="/opt/pp/ui/portfolio/PortfolioPerformance"
 if [[ ! -x "${UI_BIN}" ]]; then
