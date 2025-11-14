@@ -245,7 +245,7 @@ if [[ $OVERALL_EXIT_CODE -eq 0 ]]; then
         SERVER_APP="$SCRIPT_DIR/portfolio-product/target/products/name.abuchen.portfolio.server.product/macosx/cocoa/aarch64/portfolio-server.app"
         if [[ -d "$SERVER_APP" ]]; then
             set -x
-            REDIS_ENABLED=true REDIS_HOST=localhost REDIS_PORT=6379 REDIS_DB=0 PORTFOLIO_DIR=$(realpath $SCRIPT_DIR/portfolios) ECB_DATA_DIR=/Users/shuky/.pp-api/config "$SERVER_APP/Contents/MacOS/PortfolioPerformanceServer" -nosplash -consoleLog
+            REDIS_ENABLED=true REDIS_HOST=localhost REDIS_PORT=6379 REDIS_DB=0 PORTFOLIO_DIR=$(realpath $SCRIPT_DIR/portfolios) FLEX_REPORTS_DIR=$(realpath $SCRIPT_DIR/../tws_api/out) ECB_DATA_DIR=/Users/shuky/.pp-api/config "$SERVER_APP/Contents/MacOS/PortfolioPerformanceServer" -nosplash -consoleLog
         else
             echo "❌ Server executable not found at: $SERVER_APP"
             echo "   Please build the server first with: $0 --server"

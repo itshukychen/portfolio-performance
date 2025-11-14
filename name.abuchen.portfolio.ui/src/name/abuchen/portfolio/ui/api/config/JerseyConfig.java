@@ -22,6 +22,7 @@ import name.abuchen.portfolio.ui.api.controller.SecurityController;
 import name.abuchen.portfolio.ui.api.controller.TaxonomiesController;
 import name.abuchen.portfolio.ui.api.controller.TransactionsController;
 import name.abuchen.portfolio.ui.api.controller.WidgetController;
+import name.abuchen.portfolio.ui.api.controller.FlexImportController;
 
 /**
  * Jersey configuration for JSON support in the Portfolio Performance API server.
@@ -70,6 +71,7 @@ public class JerseyConfig extends ResourceConfig {
         register(OptionsController.class);
         register(TransactionsController.class);
         register(TaxonomiesController.class);
+        register(FlexImportController.class);
         
         // Disable Bean Validation to avoid javax.validation dependency in OSGi
         property(ServerProperties.BV_FEATURE_DISABLE, true);
