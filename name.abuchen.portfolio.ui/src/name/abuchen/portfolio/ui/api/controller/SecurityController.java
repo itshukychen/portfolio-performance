@@ -367,6 +367,8 @@ public class SecurityController extends BaseController {
                                 capitalGainsSecurityCurrency.getAmount() / Values.Money.factor());
                 dto.setUnrealizedGainsAllTime(capitalGainsBaseCurrency.getAmount() / Values.Money.factor());
                 
+            } else {
+                logger.warn("No All-Time performance record found for security: {}", security.getName());
             }
             
             // Get YTD performance record
@@ -379,7 +381,8 @@ public class SecurityController extends BaseController {
                 dto.setUnrealizedGainsYTDSecurityCurrency(
                                 capitalGainsSecurityCurrency.getAmount() / Values.Money.factor());
                 dto.setUnrealizedGainsYTD(capitalGainsBaseCurrency.getAmount() / Values.Money.factor());
-
+            } else {
+                logger.warn("No YTD performance record found for security: {}", security.getName());
             }
             
             // Get daily performance record
@@ -396,8 +399,9 @@ public class SecurityController extends BaseController {
                 if (Double.isFinite(dailyReturn)) {
                     dto.setDailyPriceChange(dailyReturn * 100d);
                 }
+            } else {
+                logger.warn("No daily performance record found for security: {}", security.getName());
             }
-            
         } catch (Exception e) {
             // Log error but don't fail the entire DTO conversion
             logger.warn("Failed to calculate holdings data for security {}: {}", 

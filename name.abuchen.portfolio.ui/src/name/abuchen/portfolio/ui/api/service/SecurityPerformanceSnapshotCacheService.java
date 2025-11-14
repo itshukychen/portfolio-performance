@@ -3,6 +3,7 @@ package name.abuchen.portfolio.ui.api.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -70,7 +71,30 @@ public final class SecurityPerformanceSnapshotCacheService
         Objects.requireNonNull(client, "client"); //$NON-NLS-1$
 
         SnapshotCacheEntry entry = cache.computeIfAbsent(portfolioId, id -> new SnapshotCacheEntry());
-        return entry.ensureUpToDate(portfolioId, client);
+        return entry.ensureUpToDate(portfolioId, client, null);
+    }
+
+    /**
+     * Returns the latest cached (or lazily recomputed) snapshots for the given
+     * portfolio, ensuring that each security in the provided list has a record
+     * in each snapshot. If any security is missing from any snapshot, the
+     * snapshots will be rebuilt.
+     *
+     * @param portfolioId
+     *            the portfolio identifier
+     * @param client
+     *            cached {@link Client} instance
+     * @param securities
+     *            list of securities that must have records in each snapshot
+     * @return bundle containing daily, YTD and all-time snapshots
+     */
+    public SecurityPerformanceSnapshotBundle getSnapshots(String portfolioId, Client client, List<Security> securities)
+    {
+        Objects.requireNonNull(portfolioId, "portfolioId"); //$NON-NLS-1$
+        Objects.requireNonNull(client, "client"); //$NON-NLS-1$
+
+        SnapshotCacheEntry entry = cache.computeIfAbsent(portfolioId, id -> new SnapshotCacheEntry());
+        return entry.ensureUpToDate(portfolioId, client, securities);
     }
 
     /**
@@ -160,26 +184,54 @@ public final class SecurityPerformanceSnapshotCacheService
         private volatile SecurityPerformanceSnapshotBundle snapshots;
         private final Set<String> dirtySecurityIds = ConcurrentHashMap.newKeySet();
 
-        SecurityPerformanceSnapshotBundle ensureUpToDate(String portfolioId, Client client)
+        SecurityPerformanceSnapshotBundle ensureUpToDate(String portfolioId, Client client, List<Security> requiredSecurities)
         {
             logger.info("Ensuring up to date security performance snapshots for portfolio {}", portfolioId); //$NON-NLS-1$
-            // Fast-path: if we already have snapshots and there are no pending price updates, just return them.
+            
+            // Check if we need to verify security records
+            boolean needsSecurityCheck = requiredSecurities != null && !requiredSecurities.isEmpty();
+            
+            // Fast-path: if we already have snapshots and there are no pending price updates, 
+            // check if all required securities are present (read-only check).
             if (snapshots != null && dirtySecurityIds.isEmpty())
             {
-                logger.info("Returning cached security performance snapshots for portfolio {}", portfolioId); //$NON-NLS-1$
-                return snapshots;
+                if (!needsSecurityCheck || hasAllSecurityRecords(snapshots, requiredSecurities))
+                {
+                    logger.info("Returning cached security performance snapshots for portfolio {}", portfolioId); //$NON-NLS-1$
+                    return snapshots;
+                }
+                // If securities are missing, fall through to rebuild
+                logger.info("Some required securities are missing from snapshots, forcing rebuild for portfolio {}", portfolioId); //$NON-NLS-1$
             }
 
             // A refresh is required; take the write lock so only one thread rebuilds or refreshes the snapshots.
             lock.writeLock().lock();
             try
             {
+                // Double-check after acquiring lock
+                if (snapshots != null && dirtySecurityIds.isEmpty())
+                {
+                    if (!needsSecurityCheck || hasAllSecurityRecords(snapshots, requiredSecurities))
+                    {
+                        logger.info("Returning cached security performance snapshots for portfolio {}", portfolioId); //$NON-NLS-1$
+                        return snapshots;
+                    }
+                    // Force rebuild by clearing snapshots
+                    snapshots = null;
+                }
+
                 // If the cache entry is empty, rebuild the snapshots from scratch.
                 if (snapshots == null)
                 {
                     logger.info("Rebuilding security performance snapshots for portfolio {}", portfolioId); //$NON-NLS-1$
                     snapshots = buildSnapshots(client);
                     dirtySecurityIds.clear();
+                    
+                    // After rebuild, verify all required securities are present
+                    if (needsSecurityCheck && !hasAllSecurityRecords(snapshots, requiredSecurities))
+                    {
+                        logger.warn("Some required securities are still missing after rebuild for portfolio {}", portfolioId); //$NON-NLS-1$
+                    }
                 }
                 else if (!dirtySecurityIds.isEmpty())
                 {
@@ -187,8 +239,14 @@ public final class SecurityPerformanceSnapshotCacheService
                     Set<String> affected = Set.copyOf(dirtySecurityIds);
                     refreshSnapshots(client, snapshots, affected);
                     dirtySecurityIds.clear();
-                } else {
-                    logger.info("Returning cached security performance snapshots for portfolio {}", portfolioId); //$NON-NLS-1$
+                    
+                    // After refresh, verify all required securities are present
+                    if (needsSecurityCheck && !hasAllSecurityRecords(snapshots, requiredSecurities))
+                    {
+                        logger.info("Some required securities are missing after refresh, forcing rebuild for portfolio {}", portfolioId); //$NON-NLS-1$
+                        snapshots = buildSnapshots(client);
+                        dirtySecurityIds.clear();
+                    }
                 }
 
                 return snapshots;
@@ -197,6 +255,42 @@ public final class SecurityPerformanceSnapshotCacheService
             {
                 lock.writeLock().unlock();
             }
+        }
+
+        /**
+         * Checks if all required securities have records in each snapshot of the bundle.
+         *
+         * @param bundle
+         *            the snapshot bundle to check
+         * @param requiredSecurities
+         *            list of securities that must have records
+         * @return true if all securities have records in all snapshots, false otherwise
+         */
+        private boolean hasAllSecurityRecords(SecurityPerformanceSnapshotBundle bundle, List<Security> requiredSecurities)
+        {
+            if (bundle == null || bundle.allTime() == null || bundle.yearToDate() == null || bundle.daily() == null)
+            {
+                return false;
+            }
+
+            for (Security security : requiredSecurities)
+            {
+                if (security == null)
+                    continue;
+
+                boolean hasAllTime = bundle.allTime().getRecord(security).isPresent();
+                boolean hasYearToDate = bundle.yearToDate().getRecord(security).isPresent();
+                boolean hasDaily = bundle.daily().getRecord(security).isPresent();
+
+                if (!hasAllTime || !hasYearToDate || !hasDaily)
+                {
+                    logger.debug("Security {} is missing from snapshots - allTime: {}, yearToDate: {}, daily: {}", //$NON-NLS-1$
+                        security.getName(), hasAllTime, hasYearToDate, hasDaily);
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         void markPricesDirty(Collection<String> securityUuids)
