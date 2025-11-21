@@ -66,15 +66,19 @@ public class SecurityController extends BaseController {
                     "Portfolio must be opened first before accessing securities");
             }
             
-            // Get or create cached performance snapshots for this portfolio
-            SecurityPerformanceSnapshotBundle snapshots = securitySnapshotCacheService.getSnapshots(portfolioId,
-                client);
-            
-            logger.debug("Got security performance snapshots for portfolio {} - {}", portfolioId, snapshots);
             // Get all securities (filter out retired securities and options contracts)
-            List<SecurityDto> securities = client.getSecurities().stream()
+            List<Security> filteredSecurities = client.getSecurities().stream()
                 .filter(security -> !security.isRetired()) // Skip retired securities
                 .filter(this::isNotOptionsContract) // Skip options contracts
+                .collect(Collectors.toList());
+            
+            // Get or create cached performance snapshots for this portfolio, ensuring filtered securities exist in cache
+            SecurityPerformanceSnapshotBundle snapshots = securitySnapshotCacheService.getSnapshots(portfolioId,
+                client, filteredSecurities);
+            
+            logger.debug("Got security performance snapshots for portfolio {} - {}", portfolioId, snapshots);
+            // Convert filtered securities to DTOs
+            List<SecurityDto> securities = filteredSecurities.stream()
                 .map(security -> convertSecurityToDto(security, client, snapshots))
                 .collect(Collectors.toList());
             
