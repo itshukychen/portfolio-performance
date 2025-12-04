@@ -462,6 +462,9 @@ public class OptionsController extends BaseController {
     
     /**
      * Helper method to find the underlying security price at a specific date.
+     * 
+     * Uses the previous day's close price if the transaction occurred before market close (4:00 PM ET).
+     * Otherwise uses the same day's close price.
      */
     private Double findUnderlyingSecurityPrice(Client client, String underlyingSecurityName, LocalDateTime transactionTime) {
         if (underlyingSecurityName == null || client == null) {
@@ -480,8 +483,19 @@ public class OptionsController extends BaseController {
                 return null;
             }
             
-            // Get the price at or before the transaction date
+            // Determine which date's close price to use
+            // Market close is 4:00 PM ET (16:00)
+            // If transaction is before 4:00 PM, use previous day's close
+            // If transaction is after 4:00 PM, use same day's close
             LocalDate txDate = transactionTime.toLocalDate();
+            int hour = transactionTime.getHour();
+            
+            // If transaction is before 4:00 PM (16:00), use previous day's close
+            if (hour < 16) {
+                txDate = txDate.minusDays(1);
+            }
+            
+            // Get the price at or before the determined date
             SecurityPrice priceAtDate = underlyingSecurity.getSecurityPrice(txDate);
             
             if (priceAtDate != null) {
