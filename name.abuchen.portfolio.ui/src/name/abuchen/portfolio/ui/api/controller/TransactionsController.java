@@ -20,6 +20,7 @@ import name.abuchen.portfolio.model.AccountTransaction;
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.model.PortfolioTransaction;
 import name.abuchen.portfolio.model.TransactionPair;
+import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.ui.api.dto.TransactionDto;
 
 /**
@@ -226,7 +227,7 @@ public class TransactionsController extends BaseController {
         dto.setDateTime(transaction.getDateTime());
         dto.setCurrencyCode(transaction.getCurrencyCode());
         // Convert amount from internal representation to decimal
-        dto.setAmount(transaction.getAmount() / 100.0);
+        dto.setAmount(transaction.getAmount() / Values.Amount.divider());
         dto.setNote(transaction.getNote());
         dto.setSource(transaction.getSource());
         dto.setUpdatedAt(transaction.getUpdatedAt());
@@ -238,7 +239,7 @@ public class TransactionsController extends BaseController {
         }
         
         // Convert shares from internal representation to decimal
-        dto.setShares(transaction.getShares() / 1000000.0);
+        dto.setShares(transaction.getShares() / (double) Values.Share.factor());
         
         // Set owner info and transaction type
         if (pair.getOwner() instanceof name.abuchen.portfolio.model.Account) {
