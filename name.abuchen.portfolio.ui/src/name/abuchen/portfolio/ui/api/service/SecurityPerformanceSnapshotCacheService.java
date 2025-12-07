@@ -195,7 +195,7 @@ public final class SecurityPerformanceSnapshotCacheService
             // check if all required securities are present (read-only check).
             if (snapshots != null && dirtySecurityIds.isEmpty())
             {
-                if (!needsSecurityCheck || hasAllSecurityRecords(snapshots, requiredSecurities))
+                if (!needsSecurityCheck || hasAllSecurityRecords(snapshots, requiredSecurities, client))
                 {
                     logger.info("Returning cached security performance snapshots for portfolio {}", portfolioId); //$NON-NLS-1$
                     return snapshots;
@@ -211,7 +211,7 @@ public final class SecurityPerformanceSnapshotCacheService
                 // Double-check after acquiring lock
                 if (snapshots != null && dirtySecurityIds.isEmpty())
                 {
-                    if (!needsSecurityCheck || hasAllSecurityRecords(snapshots, requiredSecurities))
+                    if (!needsSecurityCheck || hasAllSecurityRecords(snapshots, requiredSecurities, client))
                     {
                         logger.info("Returning cached security performance snapshots for portfolio {}", portfolioId); //$NON-NLS-1$
                         return snapshots;
@@ -228,7 +228,7 @@ public final class SecurityPerformanceSnapshotCacheService
                     dirtySecurityIds.clear();
                     
                     // After rebuild, verify all required securities are present
-                    if (needsSecurityCheck && !hasAllSecurityRecords(snapshots, requiredSecurities))
+                    if (needsSecurityCheck && !hasAllSecurityRecords(snapshots, requiredSecurities, client))
                     {
                         logger.warn("Some required securities are still missing after rebuild for portfolio {}", portfolioId); //$NON-NLS-1$
                     }
@@ -241,7 +241,7 @@ public final class SecurityPerformanceSnapshotCacheService
                     dirtySecurityIds.clear();
                     
                     // After refresh, verify all required securities are present
-                    if (needsSecurityCheck && !hasAllSecurityRecords(snapshots, requiredSecurities))
+                    if (needsSecurityCheck && !hasAllSecurityRecords(snapshots, requiredSecurities, client))
                     {
                         logger.info("Some required securities are missing after refresh, forcing rebuild for portfolio {}", portfolioId); //$NON-NLS-1$
                         snapshots = buildSnapshots(client);
@@ -259,14 +259,18 @@ public final class SecurityPerformanceSnapshotCacheService
 
         /**
          * Checks if all required securities have records in each snapshot of the bundle.
+         * Only checks securities that have transactions or shares held, as securities
+         * without any activity won't have records in snapshots.
          *
          * @param bundle
          *            the snapshot bundle to check
          * @param requiredSecurities
          *            list of securities that must have records
-         * @return true if all securities have records in all snapshots, false otherwise
+         * @param client
+         *            the client instance to check for transactions
+         * @return true if all securities with activity have records in all snapshots, false otherwise
          */
-        private boolean hasAllSecurityRecords(SecurityPerformanceSnapshotBundle bundle, List<Security> requiredSecurities)
+        private boolean hasAllSecurityRecords(SecurityPerformanceSnapshotBundle bundle, List<Security> requiredSecurities, Client client)
         {
             if (bundle == null || bundle.allTime() == null || bundle.yearToDate() == null || bundle.daily() == null)
             {
@@ -277,6 +281,13 @@ public final class SecurityPerformanceSnapshotCacheService
             {
                 if (security == null)
                     continue;
+
+                // Skip securities that don't have any transactions - they won't have records
+                if (!security.hasTransactions(client))
+                {
+                    logger.debug("Security {} has no transactions, skipping record check", security.getName()); //$NON-NLS-1$
+                    continue;
+                }
 
                 boolean hasAllTime = bundle.allTime().getRecord(security).isPresent();
                 boolean hasYearToDate = bundle.yearToDate().getRecord(security).isPresent();
