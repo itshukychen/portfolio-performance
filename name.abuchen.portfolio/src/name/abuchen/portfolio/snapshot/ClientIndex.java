@@ -56,6 +56,10 @@ import java.util.stream.Collectors;
         totals = new long[size];
         delta = new double[size];
         accumulated = new double[size];
+        accumulatedUnrealizedCapitalGains = new double[size];
+        accumulatedRealizedCapitalGains = new double[size];
+        accumulatedForexGains = new double[size];
+        accumulatedEarnings = new double[size];
         inboundTransferals = new long[size];
         outboundTransferals = new long[size];
         taxes = new long[size];
@@ -68,8 +72,13 @@ import java.util.stream.Collectors;
         capitalGains = new long[size];
         realizedCapitalGains = new long[size];
         unrealizedCapitalGains = new long[size];
+        realizedForexGains = new long[size];
+        unrealizedForexGains = new long[size];
 
         collectTransferalsAndTaxes(interval);
+
+        // Calculate capital gains first so we have the data for the accumulated calculations
+        calculateCapitalGains(interval);
 
         var snapshot = new ClientSnapshotIterator(getClient(), getCurrencyConverter());
 
@@ -77,6 +86,10 @@ import java.util.stream.Collectors;
         dates[0] = interval.getStart();
         delta[0] = 0;
         accumulated[0] = 0;
+        accumulatedUnrealizedCapitalGains[0] = 0;
+        accumulatedRealizedCapitalGains[0] = 0;
+        accumulatedForexGains[0] = 0;
+        accumulatedEarnings[0] = 0;
         long valuation = totals[0] = snapshot.nextValuation(dates[0]);
 
         // calculate series
@@ -108,13 +121,63 @@ import java.util.stream.Collectors;
 
             accumulated[index] = ((accumulated[index - 1] + 1) * (delta[index] + 1)) - 1;
 
+            // Calculate accumulated percentages for unrealized capital gains
+            // Use portfolio value (adjusted for transfers) as the base for return calculation
+            long unrealizedGainsChange = unrealizedCapitalGains[index];
+            long baseValueUnrealized = valuation + inboundTransferals[index];
+            if (baseValueUnrealized > 0)
+            {
+                double deltaUnrealized = (double) unrealizedGainsChange / (double) baseValueUnrealized;
+                accumulatedUnrealizedCapitalGains[index] = ((accumulatedUnrealizedCapitalGains[index - 1] + 1) * (deltaUnrealized + 1)) - 1;
+            }
+            else
+            {
+                accumulatedUnrealizedCapitalGains[index] = accumulatedUnrealizedCapitalGains[index - 1];
+            }
+
+            // Calculate accumulated percentages for realized capital gains
+            long realizedGainsChange = realizedCapitalGains[index];
+            long baseValueRealized = valuation + inboundTransferals[index];
+            if (baseValueRealized > 0)
+            {
+                double deltaRealized = (double) realizedGainsChange / (double) baseValueRealized;
+                accumulatedRealizedCapitalGains[index] = ((accumulatedRealizedCapitalGains[index - 1] + 1) * (deltaRealized + 1)) - 1;
+            }
+            else
+            {
+                accumulatedRealizedCapitalGains[index] = accumulatedRealizedCapitalGains[index - 1];
+            }
+
+            // Calculate accumulated percentages for forex gains (realized + unrealized)
+            long forexGainsChange = realizedForexGains[index] + unrealizedForexGains[index];
+            long baseValueForex = valuation + inboundTransferals[index];
+            if (baseValueForex > 0)
+            {
+                double deltaForex = (double) forexGainsChange / (double) baseValueForex;
+                accumulatedForexGains[index] = ((accumulatedForexGains[index - 1] + 1) * (deltaForex + 1)) - 1;
+            }
+            else
+            {
+                accumulatedForexGains[index] = accumulatedForexGains[index - 1];
+            }
+
+            // Calculate accumulated percentages for earnings (dividends + interest)
+            long earningsChange = dividends[index] + interest[index];
+            long baseValueEarnings = valuation + inboundTransferals[index];
+            if (baseValueEarnings > 0)
+            {
+                double deltaEarnings = (double) earningsChange / (double) baseValueEarnings;
+                accumulatedEarnings[index] = ((accumulatedEarnings[index - 1] + 1) * (deltaEarnings + 1)) - 1;
+            }
+            else
+            {
+                accumulatedEarnings[index] = accumulatedEarnings[index - 1];
+            }
+
             date = date.plusDays(1);
             valuation = thisValuation;
             index++;
         }
-
-        // Calculate capital gains
-        calculateCapitalGains(interval);
     }
 
     protected void addValue(long[] array, String currencyCode, long value, Interval interval, LocalDate time)
@@ -236,6 +299,9 @@ import java.util.stream.Collectors;
         // Distribute unrealized gains from the daily calculation
         distributeUnrealizedGainsFromDailyCalculation(interval, dailyCalc);
         
+        // Distribute forex gains from the daily calculation
+        distributeForexGainsFromDailyCalculation(interval, dailyCalc);
+        
         // Calculate total capital gains (realized + unrealized)
         calculateTotalCapitalGains(interval, dailyCalc);
     }
@@ -274,6 +340,33 @@ import java.util.stream.Collectors;
         }
     }
 
+    private void distributeForexGainsFromDailyCalculation(Interval interval, DailyCapitalGainsCalculation dailyCalc)
+    {
+        // Get all dates that have realized forex gains
+        List<LocalDate> datesWithRealizedGains = dailyCalc.getDatesWithRealizedGains();
+        for (LocalDate date : datesWithRealizedGains)
+        {
+            Money forexGainsForDate = dailyCalc.getRealizedForexGains(date);
+            if (forexGainsForDate.getAmount() != 0)
+            {
+                addValue(realizedForexGains, forexGainsForDate.getCurrencyCode(), 
+                        forexGainsForDate.getAmount(), interval, date);
+            }
+        }
+        
+        // Get all dates that have unrealized forex gains
+        List<LocalDate> datesWithUnrealizedGains = dailyCalc.getDatesWithUnrealizedGains();
+        for (LocalDate date : datesWithUnrealizedGains)
+        {
+            Money forexGainsForDate = dailyCalc.getUnrealizedForexGains(date);
+            if (forexGainsForDate.getAmount() != 0)
+            {
+                addValue(unrealizedForexGains, forexGainsForDate.getCurrencyCode(), 
+                        forexGainsForDate.getAmount(), interval, date);
+            }
+        }
+    }
+
     private void calculateTotalCapitalGains(Interval interval, DailyCapitalGainsCalculation dailyCalc)
     {
         // Calculate total capital gains (realized + unrealized) for each day
@@ -291,6 +384,5 @@ import java.util.stream.Collectors;
             }
         }
     }
-    
 
 }

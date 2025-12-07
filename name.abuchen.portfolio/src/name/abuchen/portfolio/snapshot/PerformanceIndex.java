@@ -58,8 +58,14 @@ public class PerformanceIndex
     protected long[] capitalGains;
     protected long[] realizedCapitalGains;
     protected long[] unrealizedCapitalGains;
+    protected long[] realizedForexGains;
+    protected long[] unrealizedForexGains;
     protected double[] accumulated;
     protected double[] delta;
+    protected double[] accumulatedUnrealizedCapitalGains;
+    protected double[] accumulatedRealizedCapitalGains;
+    protected double[] accumulatedForexGains;
+    protected double[] accumulatedEarnings;
 
     private Drawdown drawdown;
     private Volatility volatility;
@@ -178,6 +184,90 @@ public class PerformanceIndex
     {
         double accumulatedPercentage = getFinalAccumulatedPercentage();
         long days = getActualInterval().getDays();
+        return Math.pow(1 + accumulatedPercentage, 365d / ((double) days)) - 1;
+    }
+
+    /**
+     * Returns the final accumulated performance value for unrealized capital gains.
+     */
+    public double getFinalAccumulatedUnrealizedCapitalGainsPercentage()
+    {
+        return accumulatedUnrealizedCapitalGains != null && accumulatedUnrealizedCapitalGains.length > 0 
+                ? accumulatedUnrealizedCapitalGains[accumulatedUnrealizedCapitalGains.length - 1] : 0;
+    }
+
+    /**
+     * Returns the annualized accumulated performance value for unrealized capital gains.
+     */
+    public double getFinalAccumulatedUnrealizedCapitalGainsAnnualizedPercentage()
+    {
+        double accumulatedPercentage = getFinalAccumulatedUnrealizedCapitalGainsPercentage();
+        long days = getActualInterval().getDays();
+        if (days <= 0)
+            return 0;
+        return Math.pow(1 + accumulatedPercentage, 365d / ((double) days)) - 1;
+    }
+
+    /**
+     * Returns the final accumulated performance value for realized capital gains.
+     */
+    public double getFinalAccumulatedRealizedCapitalGainsPercentage()
+    {
+        return accumulatedRealizedCapitalGains != null && accumulatedRealizedCapitalGains.length > 0 
+                ? accumulatedRealizedCapitalGains[accumulatedRealizedCapitalGains.length - 1] : 0;
+    }
+
+    /**
+     * Returns the annualized accumulated performance value for realized capital gains.
+     */
+    public double getFinalAccumulatedRealizedCapitalGainsAnnualizedPercentage()
+    {
+        double accumulatedPercentage = getFinalAccumulatedRealizedCapitalGainsPercentage();
+        long days = getActualInterval().getDays();
+        if (days <= 0)
+            return 0;
+        return Math.pow(1 + accumulatedPercentage, 365d / ((double) days)) - 1;
+    }
+
+    /**
+     * Returns the final accumulated performance value for earnings (dividends + interest).
+     */
+    public double getFinalAccumulatedEarningsPercentage()
+    {
+        return accumulatedEarnings != null && accumulatedEarnings.length > 0 
+                ? accumulatedEarnings[accumulatedEarnings.length - 1] : 0;
+    }
+
+    /**
+     * Returns the final accumulated performance value for forex gains (realized + unrealized).
+     */
+    public double getFinalAccumulatedForexGainsPercentage()
+    {
+        return accumulatedForexGains != null && accumulatedForexGains.length > 0 
+                ? accumulatedForexGains[accumulatedForexGains.length - 1] : 0;
+    }
+
+    /**
+     * Returns the annualized accumulated performance value for forex gains (realized + unrealized).
+     */
+    public double getFinalAccumulatedForexGainsAnnualizedPercentage()
+    {
+        double accumulatedPercentage = getFinalAccumulatedForexGainsPercentage();
+        long days = getActualInterval().getDays();
+        if (days <= 0)
+            return 0;
+        return Math.pow(1 + accumulatedPercentage, 365d / ((double) days)) - 1;
+    }
+
+    /**
+     * Returns the annualized accumulated performance value for earnings (dividends + interest).
+     */
+    public double getFinalAccumulatedEarningsAnnualizedPercentage()
+    {
+        double accumulatedPercentage = getFinalAccumulatedEarningsPercentage();
+        long days = getActualInterval().getDays();
+        if (days <= 0)
+            return 0;
         return Math.pow(1 + accumulatedPercentage, 365d / ((double) days)) - 1;
     }
 

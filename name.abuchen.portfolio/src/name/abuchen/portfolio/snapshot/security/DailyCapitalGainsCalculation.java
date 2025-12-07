@@ -394,6 +394,32 @@ public class DailyCapitalGainsCalculation
     }
 
     /**
+     * Get the realized forex gains for a specific date.
+     */
+    public Money getRealizedForexGains(LocalDate date)
+    {
+        CapitalGainsRecord record = realizedGainsPerDay.get(date);
+        if (record != null)
+        {
+            return record.getForexCaptialGains();
+        }
+        return Money.of(termCurrency, 0L);
+    }
+
+    /**
+     * Get the unrealized forex gains for a specific date.
+     */
+    public Money getUnrealizedForexGains(LocalDate date)
+    {
+        CapitalGainsRecord record = unrealizedGainsPerDay.get(date);
+        if (record != null)
+        {
+            return record.getForexCaptialGains();
+        }
+        return Money.of(termCurrency, 0L);
+    }
+
+    /**
      * Get all dates that have realized gains.
      */
     public List<LocalDate> getDatesWithRealizedGains()

@@ -23,8 +23,17 @@ import name.abuchen.portfolio.money.CurrencyConverterImpl;
 import name.abuchen.portfolio.money.Money;
 import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.snapshot.ClientSnapshot;
+import name.abuchen.portfolio.snapshot.ClientPerformanceSnapshot;
+import name.abuchen.portfolio.snapshot.ClientPerformanceSnapshot.CategoryType;
+import name.abuchen.portfolio.snapshot.PerformanceIndex;
+import name.abuchen.portfolio.snapshot.ReportingPeriod;
+import name.abuchen.portfolio.ui.api.dto.PerformanceCalculationDto;
+import name.abuchen.portfolio.ui.api.dto.PerformanceCalculationDto.MoneyValueDto;
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
+import name.abuchen.portfolio.util.Interval;
+import java.time.LocalDate;
+import java.util.ArrayList;
 
 /**
  * REST Controller for portfolio file operations.
@@ -322,6 +331,175 @@ public class PortfolioController extends BaseController {
                 "Internal server error", 
                 e.getMessage());
         }
+    }
+    
+    /**
+     * Get portfolio performance calculation breakdown.
+     * 
+     * This endpoint returns a detailed breakdown of portfolio performance over a specified period,
+     * including initial value, capital gains, earnings, fees, taxes, transfers, and final value.
+     * 
+     * @param portfolioId The portfolio ID
+     * @param reportingPeriodCode Optional reporting period code (e.g., "X" for Year-to-Date, "F2024-01-01_2024-12-31" for custom range).
+     *                            If not provided, defaults to Year-to-Date (YTD).
+     * @param startDate Optional start date (ISO format: YYYY-MM-DD). Used if reportingPeriodCode is not provided.
+     * @param endDate Optional end date (ISO format: YYYY-MM-DD). Used if reportingPeriodCode is not provided.
+     * @param useFifo Optional cost method flag. true for FIFO (default), false for Moving Average.
+     * @return Response containing performance calculation breakdown
+     */
+    @GET
+    @Path("/{portfolioId}/performanceCalculation")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getPerformanceCalculation(
+            @PathParam("portfolioId") String portfolioId,
+            @QueryParam("reportingPeriodCode") String reportingPeriodCode,
+            @QueryParam("startDate") String startDate,
+            @QueryParam("endDate") String endDate,
+            @QueryParam("useFifo") Boolean useFifo) {
+        try {
+            logger.info("Getting performance calculation for portfolio: {}", portfolioId);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: {}", portfolioId);
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
+                    "Portfolio must be opened first before accessing performance calculation");
+            }
+            
+            // Determine reporting period
+            Interval reportingPeriod;
+            if (reportingPeriodCode != null && !reportingPeriodCode.trim().isEmpty()) {
+                try {
+                    ReportingPeriod period = ReportingPeriod.from(reportingPeriodCode);
+                    reportingPeriod = period.toInterval(LocalDate.now());
+                } catch (Exception e) {
+                    logger.warn("Failed to parse reporting period code: {}", reportingPeriodCode, e);
+                    return createErrorResponse(Response.Status.BAD_REQUEST,
+                        "INVALID_REPORTING_PERIOD",
+                        "Invalid reporting period code: " + reportingPeriodCode);
+                }
+            } else if (startDate != null && endDate != null) {
+                try {
+                    LocalDate start = LocalDate.parse(startDate);
+                    LocalDate end = LocalDate.parse(endDate);
+                    reportingPeriod = Interval.of(start, end);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse dates: startDate={}, endDate={}", startDate, endDate, e);
+                    return createErrorResponse(Response.Status.BAD_REQUEST,
+                        "INVALID_DATE_FORMAT",
+                        "Invalid date format. Use ISO format: YYYY-MM-DD");
+                }
+            } else {
+                // Default to Year-to-Date (YTD)
+                try {
+                    ReportingPeriod ytdPeriod = ReportingPeriod.from("X");
+                    reportingPeriod = ytdPeriod.toInterval(LocalDate.now());
+                } catch (Exception e) {
+                    logger.warn("Failed to create YTD period, falling back to last year", e);
+                    // Fallback to last year if YTD fails
+                    LocalDate end = LocalDate.now();
+                    LocalDate start = end.minusYears(1);
+                    reportingPeriod = Interval.of(start, end);
+                }
+            }
+            
+            // Determine cost method (default to FIFO)
+            boolean useFifoMethod = useFifo == null || useFifo;
+            
+            // Create currency converter
+            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+            CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+            
+            // Calculate performance index
+            PerformanceIndex index = PerformanceIndex.forClient(client, converter, reportingPeriod, new ArrayList<>());
+            
+            // Get performance snapshot
+            ClientPerformanceSnapshot snapshot = index.getClientPerformanceSnapshot(useFifoMethod)
+                    .orElseThrow(() -> new IllegalStateException("Unable to calculate performance snapshot"));
+            
+            // Build DTO
+            PerformanceCalculationDto dto = new PerformanceCalculationDto();
+            dto.setCurrencyCode(client.getBaseCurrency());
+            dto.setCostMethod(useFifoMethod ? "FIFO" : "MOVING_AVERAGE");
+            
+            // Extract values from categories
+            Money initialValue = snapshot.getValue(CategoryType.INITIAL_VALUE);
+            Money capitalGains = snapshot.getValue(CategoryType.CAPITAL_GAINS);
+            Money forexCapitalGains = snapshot.getValue(CategoryType.FOREX_CAPITAL_GAINS);
+            Money realizedCapitalGains = snapshot.getValue(CategoryType.REALIZED_CAPITAL_GAINS);
+            Money earnings = snapshot.getValue(CategoryType.EARNINGS);
+            Money fees = snapshot.getValue(CategoryType.FEES);
+            Money taxes = snapshot.getValue(CategoryType.TAXES);
+            Money currencyGains = snapshot.getValue(CategoryType.CURRENCY_GAINS);
+            Money transfers = snapshot.getValue(CategoryType.TRANSFERS);
+            Money finalValue = snapshot.getValue(CategoryType.FINAL_VALUE);
+            
+            // Set initial value
+            dto.setInitialValue(createMoneyValueDto(initialValue, client.getBaseCurrency()));
+            dto.setInitialValueDate(snapshot.getStartClientSnapshot().getTime());
+            
+            // Set gains and earnings
+            dto.setCapitalGains(createMoneyValueDto(capitalGains, client.getBaseCurrency()));
+            dto.setForexCapitalGains(createMoneyValueDto(forexCapitalGains, client.getBaseCurrency()));
+            dto.setRealizedCapitalGains(createMoneyValueDto(realizedCapitalGains, client.getBaseCurrency()));
+            dto.setEarnings(createMoneyValueDto(earnings, client.getBaseCurrency()));
+            
+            // Set fees and taxes (negative values)
+            dto.setFees(createMoneyValueDto(fees, client.getBaseCurrency()));
+            dto.setTaxes(createMoneyValueDto(taxes, client.getBaseCurrency()));
+            
+            // Set currency gains and transfers
+            dto.setCashCurrencyGains(createMoneyValueDto(currencyGains, client.getBaseCurrency()));
+            dto.setPerformanceNeutralTransfers(createMoneyValueDto(transfers, client.getBaseCurrency()));
+            
+            // Set final value
+            dto.setFinalValue(createMoneyValueDto(finalValue, client.getBaseCurrency()));
+            dto.setFinalValueDate(snapshot.getEndClientSnapshot().getTime());
+            
+            // Set accumulated performance percentages
+            PerformanceCalculationDto.AccumulatedPerformanceDto accumulatedPerformance = 
+                new PerformanceCalculationDto.AccumulatedPerformanceDto();
+            accumulatedPerformance.setTotal(index.getFinalAccumulatedPercentage());
+            accumulatedPerformance.setTotalAnnualized(index.getFinalAccumulatedAnnualizedPercentage());
+            accumulatedPerformance.setUnrealizedCapitalGains(index.getFinalAccumulatedUnrealizedCapitalGainsPercentage());
+            accumulatedPerformance.setUnrealizedCapitalGainsAnnualized(index.getFinalAccumulatedUnrealizedCapitalGainsAnnualizedPercentage());
+            accumulatedPerformance.setRealizedCapitalGains(index.getFinalAccumulatedRealizedCapitalGainsPercentage());
+            accumulatedPerformance.setRealizedCapitalGainsAnnualized(index.getFinalAccumulatedRealizedCapitalGainsAnnualizedPercentage());
+            accumulatedPerformance.setForexGains(index.getFinalAccumulatedForexGainsPercentage());
+            accumulatedPerformance.setForexGainsAnnualized(index.getFinalAccumulatedForexGainsAnnualizedPercentage());
+            accumulatedPerformance.setEarnings(index.getFinalAccumulatedEarningsPercentage());
+            accumulatedPerformance.setEarningsAnnualized(index.getFinalAccumulatedEarningsAnnualizedPercentage());
+            dto.setAccumulatedPerformance(accumulatedPerformance);
+            
+            logger.info("Performance calculation completed for portfolio: {}", portfolioId);
+            
+            return Response.ok(dto).build();
+            
+        } catch (IllegalStateException e) {
+            logger.error("Failed to calculate performance snapshot for portfolio {}: {}", 
+                portfolioId, e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR,
+                "CALCULATION_ERROR",
+                "Failed to calculate performance snapshot: " + e.getMessage());
+        } catch (Exception e) {
+            logger.error("Unexpected error getting performance calculation for portfolio {}: {}", 
+                portfolioId, e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
+    }
+    
+    /**
+     * Helper method to create MoneyValueDto from Money.
+     */
+    private MoneyValueDto createMoneyValueDto(Money money, String baseCurrency) {
+        double rawValue = money.getAmount() / Values.Money.factor();
+        String formatted = Values.Money.format(money, baseCurrency);
+        return new MoneyValueDto(formatted, rawValue);
     }
     
 }
