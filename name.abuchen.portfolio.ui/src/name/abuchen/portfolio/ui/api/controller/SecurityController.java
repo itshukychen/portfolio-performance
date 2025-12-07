@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import javax.ws.rs.Consumes;
+import javax.ws.rs.DefaultValue;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -15,6 +16,7 @@ import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
@@ -47,14 +49,17 @@ public class SecurityController extends BaseController {
      * - Options contracts (ticker symbols matching pattern: 6 digits + C/P + 8 digits)
      * 
      * @param portfolioId The portfolio ID
+     * @param useSnapshot If true (default), includes extended properties calculated from performance snapshots.
+     *                    If false, returns simplified version without holdings data and performance metrics.
      * @return List of active securities (excluding retired and options contracts)
      */
     @GET
     @Path("")
     @Produces(MediaType.APPLICATION_JSON)
-    public Response getAllSecurities(@PathParam("portfolioId") String portfolioId) {
+    public Response getAllSecurities(@PathParam("portfolioId") String portfolioId,
+                                    @QueryParam("useSnapshot") @DefaultValue("true") boolean useSnapshot) {
         try {
-            logger.info("Getting all securities for portfolio: {}", portfolioId);
+            logger.info("Getting all securities for portfolio: {} (useSnapshot: {})", portfolioId, useSnapshot);
             
             // Get the cached Client for this portfolio
             Client client = portfolioFileService.getPortfolio(portfolioId);
@@ -72,14 +77,18 @@ public class SecurityController extends BaseController {
                 .filter(this::isNotOptionsContract) // Skip options contracts
                 .collect(Collectors.toList());
             
-            // Get or create cached performance snapshots for this portfolio, ensuring filtered securities exist in cache
-            SecurityPerformanceSnapshotBundle snapshots = securitySnapshotCacheService.getSnapshots(portfolioId,
-                client, filteredSecurities);
+            // Get or create cached performance snapshots only if useSnapshot is true
+            final SecurityPerformanceSnapshotBundle snapshots = useSnapshot
+                ? securitySnapshotCacheService.getSnapshots(portfolioId, client, filteredSecurities)
+                : null;
             
-            logger.debug("Got security performance snapshots for portfolio {} - {}", portfolioId, snapshots);
+            if (useSnapshot && snapshots != null) {
+                logger.debug("Got security performance snapshots for portfolio {} - {}", portfolioId, snapshots);
+            }
+            
             // Convert filtered securities to DTOs
             List<SecurityDto> securities = filteredSecurities.stream()
-                .map(security -> convertSecurityToDto(security, client, snapshots))
+                .map(security -> convertSecurityToDto(security, client, snapshots, useSnapshot))
                 .collect(Collectors.toList());
             
             // Create response
@@ -88,8 +97,8 @@ public class SecurityController extends BaseController {
             response.put("count", securities.size());
             response.put("securities", securities);
             
-            logger.info("Returning {} active securities for portfolio {} (filtered out retired and options contracts)", 
-                securities.size(), portfolioId);
+            logger.info("Returning {} active securities for portfolio {} (filtered out retired and options contracts, useSnapshot: {})", 
+                securities.size(), portfolioId, useSnapshot);
             
             return Response.ok(response).build();
             
@@ -149,8 +158,8 @@ public class SecurityController extends BaseController {
             SecurityPerformanceSnapshotBundle snapshots = securitySnapshotCacheService.getSnapshots(portfolioId,
                 client);
             
-            // Convert to DTO
-            SecurityDto securityDto = convertSecurityToDto(security, client, snapshots);
+            // Convert to DTO (always use snapshot for individual security endpoint)
+            SecurityDto securityDto = convertSecurityToDto(security, client, snapshots, true);
             
             // Create response
             Map<String, Object> response = new HashMap<>();
@@ -264,9 +273,15 @@ public class SecurityController extends BaseController {
     /**
      * Helper method to convert Security to SecurityDto.
      * Aligned with PortfolioFileService.loadSecurities()
+     * 
+     * @param security The security to convert
+     * @param client The client/portfolio
+     * @param snapshots Performance snapshots (can be null if useSnapshot is false)
+     * @param useSnapshot If true, calculates extended properties including holdings data
      */
     private SecurityDto convertSecurityToDto(Security security, Client client, 
-                                            SecurityPerformanceSnapshotBundle snapshots) {
+                                            SecurityPerformanceSnapshotBundle snapshots,
+                                            boolean useSnapshot) {
         SecurityDto dto = new SecurityDto();
         dto.setUuid(security.getUUID());
         dto.setName(security.getName());
@@ -296,8 +311,10 @@ public class SecurityController extends BaseController {
                 security.getName(), e.getMessage());
         }
         
-        // Calculate holdings data using pre-created snapshots
-        calculateHoldingsData(dto, security, client, snapshots);
+        // Calculate holdings data using pre-created snapshots only if useSnapshot is true
+        if (useSnapshot) {
+            calculateHoldingsData(dto, security, client, snapshots);
+        }
         
         return dto;
     }
