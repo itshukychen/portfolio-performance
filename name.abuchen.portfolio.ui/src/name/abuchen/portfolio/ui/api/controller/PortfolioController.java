@@ -17,6 +17,12 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import name.abuchen.portfolio.model.Client;
+import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
+import name.abuchen.portfolio.money.CurrencyConverter;
+import name.abuchen.portfolio.money.CurrencyConverterImpl;
+import name.abuchen.portfolio.money.Money;
+import name.abuchen.portfolio.money.Values;
+import name.abuchen.portfolio.snapshot.ClientSnapshot;
 import name.abuchen.portfolio.ui.api.dto.PortfolioFileInfo;
 import name.abuchen.portfolio.ui.api.service.QuoteFeedApiKeyService;
 
@@ -254,6 +260,64 @@ public class PortfolioController extends BaseController {
             
         } catch (Exception e) {
             logger.error("Unexpected error getting last price update time for portfolio " + portfolioId + ": " + e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
+    }
+    
+    /**
+     * Get the total portfolio value (current valuation).
+     * 
+     * This endpoint returns the current total value of the portfolio,
+     * calculated as the sum of all account balances and security positions.
+     * 
+     * @param portfolioId The portfolio ID
+     * @return Response containing the total portfolio value
+     */
+    @GET
+    @Path("/{portfolioId}/totalValue")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getTotalValue(@PathParam("portfolioId") String portfolioId) {
+        try {
+            logger.info("Getting total value for portfolio: {}", portfolioId);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: {}", portfolioId);
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
+                    "Portfolio must be opened first before accessing total value");
+            }
+            
+            // Create currency converter
+            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+            CurrencyConverter converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
+            java.time.LocalDate today = java.time.LocalDate.now();
+            
+            // Create client snapshot to get total value
+            ClientSnapshot snapshot = ClientSnapshot.create(client, converter, today);
+            Money totalValue = snapshot.getMonetaryAssets();
+            
+            // Convert from internal representation (multiplied by 100) to decimal
+            double totalValueDecimal = totalValue.getAmount() / Values.Money.factor();
+            
+            // Create response
+            Map<String, Object> response = new HashMap<>();
+            response.put("portfolioId", portfolioId);
+            response.put("totalValue", totalValueDecimal);
+            response.put("currencyCode", totalValue.getCurrencyCode());
+            response.put("date", today.toString());
+            
+            logger.info("Total value for portfolio {}: {} {}", portfolioId, totalValueDecimal, totalValue.getCurrencyCode());
+            
+            return Response.ok(response).build();
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error getting total value for portfolio {}: {}", 
+                portfolioId, e.getMessage(), e);
             return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
                 "Internal server error", 
                 e.getMessage());
