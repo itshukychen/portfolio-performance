@@ -14,16 +14,20 @@ import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import name.abuchen.portfolio.model.Client;
 import name.abuchen.portfolio.money.ExchangeRateProviderFactory;
+import name.abuchen.portfolio.money.Money;
+import name.abuchen.portfolio.money.Values;
 import name.abuchen.portfolio.ui.api.dto.AssignmentDto;
 import name.abuchen.portfolio.ui.api.dto.ClassificationDto;
 import name.abuchen.portfolio.ui.api.dto.TaxonomyDto;
 import name.abuchen.portfolio.ui.views.taxonomy.TaxonomyModel;
 import name.abuchen.portfolio.ui.views.taxonomy.TaxonomyNode;
+import java.time.LocalDate;
 
 /**
  * REST Controller for taxonomy operations.
@@ -197,6 +201,141 @@ public class TaxonomiesController extends BaseController {
         return createErrorResponse(Response.Status.NOT_IMPLEMENTED, 
             "Not implemented", 
             "Taxonomy deletion not yet implemented");
+    }
+    
+    /**
+     * Get taxonomy DCA (Dollar Cost Averaging) data for a specific date.
+     * 
+     * This endpoint calculates the portfolio's taxonomy actual and target proportions
+     * as they were at a specific point in time. This is useful for DCA planning.
+     * 
+     * @param portfolioId The portfolio ID
+     * @param taxonomyId The taxonomy ID
+     * @param date The date to calculate for (ISO format: YYYY-MM-DD). Defaults to today if not provided.
+     * @return Taxonomy DCA data with actual and target proportions for each child classification
+     */
+    @GET
+    @Path("/{taxonomyId}/dca")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getTaxonomyDca(@PathParam("portfolioId") String portfolioId,
+                                   @PathParam("taxonomyId") String taxonomyId,
+                                   @QueryParam("date") String date) {
+        try {
+            logger.info("Getting taxonomy DCA for taxonomy {} in portfolio {} at date {}", 
+                taxonomyId, portfolioId, date);
+            
+            // Get the cached Client for this portfolio
+            Client client = portfolioFileService.getPortfolio(portfolioId);
+            
+            if (client == null) {
+                logger.warn("No cached client found for portfolio: {}", portfolioId);
+                return createPreconditionRequiredResponse(
+                    "PORTFOLIO_NOT_LOADED", 
+                    "Portfolio must be opened first before accessing taxonomy DCA");
+            }
+            
+            // Find the taxonomy by ID
+            name.abuchen.portfolio.model.Taxonomy taxonomy = client.getTaxonomies().stream()
+                .filter(t -> taxonomyId.equals(t.getId()))
+                .findFirst()
+                .orElse(null);
+            
+            if (taxonomy == null) {
+                logger.warn("Taxonomy not found: {} in portfolio: {}", taxonomyId, portfolioId);
+                return createErrorResponse(Response.Status.NOT_FOUND, 
+                    "Taxonomy not found", 
+                    "Taxonomy with ID " + taxonomyId + " not found in portfolio");
+            }
+            
+            // Parse date (default to today)
+            LocalDate targetDate;
+            if (date != null && !date.trim().isEmpty()) {
+                try {
+                    targetDate = LocalDate.parse(date);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse date: {}", date, e);
+                    return createErrorResponse(Response.Status.BAD_REQUEST,
+                        "INVALID_DATE_FORMAT",
+                        "Invalid date format. Use ISO format: YYYY-MM-DD");
+                }
+            } else {
+                targetDate = LocalDate.now();
+            }
+            
+            // Create currency converter
+            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+            
+            // Create TaxonomyModel with the target date
+            TaxonomyModel model = new TaxonomyModel(factory, client, taxonomy, targetDate);
+            
+            // Get root classification node and its children
+            TaxonomyNode root = model.getClassificationRootNode();
+            List<TaxonomyNode> children = root.getChildren();
+            
+            // Build response with actual and target proportions
+            Map<String, Object> response = new HashMap<>();
+            response.put("portfolioId", portfolioId);
+            response.put("taxonomyId", taxonomyId);
+            response.put("taxonomyName", taxonomy.getName());
+            response.put("date", targetDate.toString());
+            response.put("currency", client.getBaseCurrency());
+            
+            // Calculate total portfolio value
+            Money totalValue = root.getActual();
+            double totalValueDecimal = totalValue.getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
+            response.put("totalValue", totalValueDecimal);
+            response.put("totalValueFormatted", name.abuchen.portfolio.money.Values.Money.format(totalValue));
+            
+            // Build children data
+            List<Map<String, Object>> childrenData = new ArrayList<>();
+            for (TaxonomyNode child : children) {
+                Map<String, Object> childData = new HashMap<>();
+                
+                Money actual = child.getActual();
+                Money target = child.getTarget();
+                
+                double actualValue = actual.getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
+                double targetValue = target.getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
+                
+                // Calculate proportions (percentages)
+                double actualProportion = totalValueDecimal > 0 ? (actualValue / totalValueDecimal) * 100 : 0;
+                double targetProportion = totalValueDecimal > 0 ? (targetValue / totalValueDecimal) * 100 : 0;
+                
+                childData.put("id", child.getId());
+                childData.put("name", child.getName());
+                childData.put("actualValue", actualValue);
+                childData.put("actualValueFormatted", name.abuchen.portfolio.money.Values.Money.format(actual));
+                childData.put("actualProportion", actualProportion);
+                childData.put("targetValue", targetValue);
+                childData.put("targetValueFormatted", name.abuchen.portfolio.money.Values.Money.format(target));
+                childData.put("targetProportion", targetProportion);
+                childData.put("difference", targetValue - actualValue);
+                childData.put("differenceFormatted", name.abuchen.portfolio.money.Values.Money.format(target.subtract(actual)));
+                childData.put("differenceProportion", targetProportion - actualProportion);
+                
+                if (child.isClassification() && child.getClassification() != null) {
+                    childData.put("color", child.getClassification().getColor());
+                    childData.put("weight", child.getClassification().getWeight());
+                }
+                
+                childrenData.add(childData);
+            }
+            
+            response.put("children", childrenData);
+            response.put("childrenCount", childrenData.size());
+            
+            logger.info("Returning taxonomy DCA data for taxonomy {} ({}) at date {}", 
+                taxonomy.getName(), taxonomyId, targetDate);
+            
+            return Response.ok(response).build();
+            
+        } catch (Exception e) {
+            logger.error("Unexpected error getting taxonomy DCA for taxonomy {} in portfolio {}: {}", 
+                taxonomyId, portfolioId, e.getMessage(), e);
+            return createErrorResponse(Response.Status.INTERNAL_SERVER_ERROR, 
+                "Internal server error", 
+                e.getMessage());
+        }
     }
     
     // ===== Helper Methods (Migrated from PortfolioFileService) =====

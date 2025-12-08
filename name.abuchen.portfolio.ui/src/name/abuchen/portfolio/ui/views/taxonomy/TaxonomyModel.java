@@ -117,6 +117,11 @@ public final class TaxonomyModel
 
     public TaxonomyModel(ExchangeRateProviderFactory factory, Client client, Taxonomy taxonomy)
     {
+        this(factory, client, taxonomy, LocalDate.now());
+    }
+
+    public TaxonomyModel(ExchangeRateProviderFactory factory, Client client, Taxonomy taxonomy, LocalDate snapshotDate)
+    {
         this.taxonomy = Objects.requireNonNull(taxonomy);
         this.client = Objects.requireNonNull(client);
         this.factory = Objects.requireNonNull(factory);
@@ -124,7 +129,7 @@ public final class TaxonomyModel
         this.converter = new CurrencyConverterImpl(factory, client.getBaseCurrency());
 
         this.filteredClient = client;
-        this.snapshot = ClientSnapshot.create(client, converter, LocalDate.now());
+        this.snapshot = ClientSnapshot.create(client, converter, snapshotDate != null ? snapshotDate : LocalDate.now());
 
         this.attachedModels.add(new RecalculateTargetsAttachedModel());
         this.attachedModels.add(new ExpectedReturnsAttachedModel());
