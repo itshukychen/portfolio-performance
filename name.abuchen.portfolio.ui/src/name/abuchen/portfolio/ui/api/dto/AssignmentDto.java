@@ -8,14 +8,18 @@ public class AssignmentDto {
     
     private String investmentVehicleUuid;
     private String investmentVehicleName;
-    private int weight;
+    private Double weight;
     private int rank;
     private Double proportion; // Actual % - proportion of parent classification
+    private Double actualValue; // Actual value in base currency
+    private Double targetValue; // Target value in base currency
+    private Double actualProportion; // Actual proportion as percentage of total
+    private Double targetProportion; // Target proportion as percentage of total
     
     // Constructors
     public AssignmentDto() {}
     
-    public AssignmentDto(String investmentVehicleUuid, String investmentVehicleName, int weight) {
+    public AssignmentDto(String investmentVehicleUuid, String investmentVehicleName, Double weight) {
         this.investmentVehicleUuid = investmentVehicleUuid;
         this.investmentVehicleName = investmentVehicleName;
         this.weight = weight;
@@ -38,11 +42,11 @@ public class AssignmentDto {
         this.investmentVehicleName = investmentVehicleName;
     }
     
-    public int getWeight() {
+    public Double getWeight() {
         return weight;
     }
     
-    public void setWeight(int weight) {
+    public void setWeight(Double weight) {
         this.weight = weight;
     }
     
@@ -60,6 +64,38 @@ public class AssignmentDto {
     
     public void setProportion(Double proportion) {
         this.proportion = proportion;
+    }
+    
+    public Double getActualValue() {
+        return actualValue;
+    }
+    
+    public void setActualValue(Double actualValue) {
+        this.actualValue = actualValue;
+    }
+    
+    public Double getTargetValue() {
+        return targetValue;
+    }
+    
+    public void setTargetValue(Double targetValue) {
+        this.targetValue = targetValue;
+    }
+    
+    public Double getActualProportion() {
+        return actualProportion;
+    }
+    
+    public void setActualProportion(Double actualProportion) {
+        this.actualProportion = actualProportion;
+    }
+    
+    public Double getTargetProportion() {
+        return targetProportion;
+    }
+    
+    public void setTargetProportion(Double targetProportion) {
+        this.targetProportion = targetProportion;
     }
 }
 

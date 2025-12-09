@@ -262,67 +262,32 @@ public class TaxonomiesController extends BaseController {
                 targetDate = LocalDate.now();
             }
             
-            // Create currency converter
-            ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+            // Convert taxonomy to DTO using the shared conversion method
+            TaxonomyDto taxonomyDto = convertTaxonomyToDto(taxonomy, client, targetDate);
             
-            // Create TaxonomyModel with the target date
-            TaxonomyModel model = new TaxonomyModel(factory, client, taxonomy, targetDate);
+            // Get root node to calculate total value
+            TaxonomyNode root = buildTaxonomyModel(client, taxonomy, targetDate);
+            Money totalValue = root.getActual();
+            double totalValueDecimal = totalValue.getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
             
-            // Get root classification node and its children
-            TaxonomyNode root = model.getClassificationRootNode();
-            List<TaxonomyNode> children = root.getChildren();
-            
-            // Build response with actual and target proportions
+            // Build response using DTO structure
             Map<String, Object> response = new HashMap<>();
             response.put("portfolioId", portfolioId);
             response.put("taxonomyId", taxonomyId);
             response.put("taxonomyName", taxonomy.getName());
             response.put("date", targetDate.toString());
             response.put("currency", client.getBaseCurrency());
-            
-            // Calculate total portfolio value
-            Money totalValue = root.getActual();
-            double totalValueDecimal = totalValue.getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
             response.put("totalValue", totalValueDecimal);
             response.put("totalValueFormatted", name.abuchen.portfolio.money.Values.Money.format(totalValue));
             
-            // Build children data
-            List<Map<String, Object>> childrenData = new ArrayList<>();
-            for (TaxonomyNode child : children) {
-                Map<String, Object> childData = new HashMap<>();
-                
-                Money actual = child.getActual();
-                Money target = child.getTarget();
-                
-                double actualValue = actual.getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
-                double targetValue = target.getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
-                
-                // Calculate proportions (percentages)
-                double actualProportion = totalValueDecimal > 0 ? (actualValue / totalValueDecimal) * 100 : 0;
-                double targetProportion = totalValueDecimal > 0 ? (targetValue / totalValueDecimal) * 100 : 0;
-                
-                childData.put("id", child.getId());
-                childData.put("name", child.getName());
-                childData.put("actualValue", actualValue);
-                childData.put("actualValueFormatted", name.abuchen.portfolio.money.Values.Money.format(actual));
-                childData.put("actualProportion", actualProportion);
-                childData.put("targetValue", targetValue);
-                childData.put("targetValueFormatted", name.abuchen.portfolio.money.Values.Money.format(target));
-                childData.put("targetProportion", targetProportion);
-                childData.put("difference", targetValue - actualValue);
-                childData.put("differenceFormatted", name.abuchen.portfolio.money.Values.Money.format(target.subtract(actual)));
-                childData.put("differenceProportion", targetProportion - actualProportion);
-                
-                if (child.isClassification() && child.getClassification() != null) {
-                    childData.put("color", child.getClassification().getColor());
-                    childData.put("weight", child.getClassification().getWeight());
-                }
-                
-                childrenData.add(childData);
+            // Use children directly from DTO
+            if (taxonomyDto.getRoot() != null && taxonomyDto.getRoot().getChildren() != null) {
+                response.put("children", taxonomyDto.getRoot().getChildren());
+                response.put("childrenCount", taxonomyDto.getRoot().getChildren().size());
+            } else {
+                response.put("children", new ArrayList<>());
+                response.put("childrenCount", 0);
             }
-            
-            response.put("children", childrenData);
-            response.put("childrenCount", childrenData.size());
             
             logger.info("Returning taxonomy DCA data for taxonomy {} ({}) at date {}", 
                 taxonomy.getName(), taxonomyId, targetDate);
@@ -339,6 +304,21 @@ public class TaxonomiesController extends BaseController {
     }
     
     // ===== Helper Methods (Migrated from PortfolioFileService) =====
+    
+    /**
+     * Helper method to build TaxonomyModel and get the root classification node.
+     * This centralizes the creation of TaxonomyModel with optional date parameter.
+     * 
+     * @param client The client
+     * @param taxonomy The taxonomy
+     * @param date Optional date (null means use today)
+     * @return The root TaxonomyNode from the model
+     */
+    private TaxonomyNode buildTaxonomyModel(Client client, name.abuchen.portfolio.model.Taxonomy taxonomy, LocalDate date) {
+        ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
+        TaxonomyModel model = new TaxonomyModel(factory, client, taxonomy, date != null ? date : LocalDate.now());
+        return model.getClassificationRootNode();
+    }
     
     /**
      * Helper method to convert all taxonomies from client to DTOs.
@@ -359,8 +339,13 @@ public class TaxonomiesController extends BaseController {
     
     /**
      * Helper method to convert a single Taxonomy to TaxonomyDto.
+     * 
+     * @param taxonomy The taxonomy to convert
+     * @param client The client
+     * @param date Optional date (null means use today)
+     * @return The converted TaxonomyDto
      */
-    private TaxonomyDto convertTaxonomyToDto(name.abuchen.portfolio.model.Taxonomy taxonomy, Client client) {
+    private TaxonomyDto convertTaxonomyToDto(name.abuchen.portfolio.model.Taxonomy taxonomy, Client client, LocalDate date) {
         TaxonomyDto dto = new TaxonomyDto();
         dto.setId(taxonomy.getId());
         dto.setName(taxonomy.getName());
@@ -369,18 +354,22 @@ public class TaxonomiesController extends BaseController {
         dto.setClassificationsCount(taxonomy.getAllClassifications().size());
         dto.setHeight(taxonomy.getHeigth());
         
-        // Create factory for exchange rates
-        ExchangeRateProviderFactory factory = new ExchangeRateProviderFactory(client);
-        
-        // Create TaxonomyModel to calculate actual values and proportions
-        TaxonomyModel model = new TaxonomyModel(factory, client, taxonomy);
+        // Build TaxonomyModel with optional date
+        TaxonomyNode rootNode = buildTaxonomyModel(client, taxonomy, date);
         
         // Convert the root classification
         if (taxonomy.getRoot() != null) {
-            dto.setRoot(convertClassification(taxonomy.getRoot(), model.getClassificationRootNode()));
+            dto.setRoot(convertClassification(taxonomy.getRoot(), rootNode, rootNode.getActual()));
         }
         
         return dto;
+    }
+    
+    /**
+     * Helper method to convert a single Taxonomy to TaxonomyDto (using today's date).
+     */
+    private TaxonomyDto convertTaxonomyToDto(name.abuchen.portfolio.model.Taxonomy taxonomy, Client client) {
+        return convertTaxonomyToDto(taxonomy, client, null);
     }
     
     /**
@@ -389,16 +378,17 @@ public class TaxonomiesController extends BaseController {
      * 
      * @param classification The classification to convert
      * @param taxonomyNode The corresponding TaxonomyNode (used to calculate proportions)
+     * @param rootTotalValue The root total value for calculating proportions
      * @return The converted ClassificationDto
      */
     private ClassificationDto convertClassification(name.abuchen.portfolio.model.Classification classification, 
-                                                   TaxonomyNode taxonomyNode) {
+                                                   TaxonomyNode taxonomyNode, Money rootTotalValue) {
         ClassificationDto dto = new ClassificationDto();
         dto.setId(classification.getId());
         dto.setName(classification.getName());
         dto.setDescription(classification.getNote());
         dto.setColor(classification.getColor());
-        dto.setWeight(classification.getWeight());
+        dto.setWeight(classification.getWeight() / name.abuchen.portfolio.money.Values.Weight.divider());
         dto.setRank(classification.getRank());
         dto.setKey(classification.getKey());
         
@@ -414,9 +404,35 @@ public class TaxonomiesController extends BaseController {
             }
         }
         
+        // Add actual and target values and proportions relative to root total
+        if (taxonomyNode != null) {
+            long rootTotal = rootTotalValue != null ? rootTotalValue.getAmount() : 0;
+            
+            if (taxonomyNode.getActual() != null) {
+                double actualValue = taxonomyNode.getActual().getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
+                dto.setActualValue(actualValue);
+                
+                if (rootTotal > 0) {
+                    double actualProportion = (taxonomyNode.getActual().getAmount() / (double) rootTotal) * 100;
+                    dto.setActualProportion(actualProportion);
+                }
+            }
+            
+            if (taxonomyNode.getTarget() != null) {
+                double targetValue = taxonomyNode.getTarget().getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
+                dto.setTargetValue(targetValue);
+                
+                if (rootTotal > 0) {
+                    double targetProportion = (taxonomyNode.getTarget().getAmount() / (double) rootTotal) * 100;
+                    dto.setTargetProportion(targetProportion);
+                }
+            }
+        }
+        
         // Get parent actual amount for calculating assignment proportions
         long parentActual = taxonomyNode != null && taxonomyNode.getActual() != null 
             ? taxonomyNode.getActual().getAmount() : 0;
+        long rootTotal = rootTotalValue != null ? rootTotalValue.getAmount() : 0;
         
         // Convert assignments
         List<AssignmentDto> assignmentDtos = new ArrayList<>();
@@ -424,16 +440,39 @@ public class TaxonomiesController extends BaseController {
             AssignmentDto assignmentDto = new AssignmentDto();
             assignmentDto.setInvestmentVehicleUuid(assignment.getInvestmentVehicle().getUUID());
             assignmentDto.setInvestmentVehicleName(assignment.getInvestmentVehicle().getName());
-            assignmentDto.setWeight(assignment.getWeight());
+            assignmentDto.setWeight(assignment.getWeight() / name.abuchen.portfolio.money.Values.Weight.divider());
             assignmentDto.setRank(assignment.getRank());
             
-            // Calculate proportion (Actual %) from TaxonomyNode
-            if (taxonomyNode != null && parentActual > 0) {
-                TaxonomyNode assignmentNode = findAssignmentNode(taxonomyNode, assignment);
-                if (assignmentNode != null && assignmentNode.getActual() != null) {
+            // Get assignment node to extract actual and target values
+            TaxonomyNode assignmentNode = findAssignmentNode(taxonomyNode, assignment);
+            if (assignmentNode != null) {
+                // Calculate proportion (Actual %) relative to parent
+                if (parentActual > 0 && assignmentNode.getActual() != null) {
                     long actual = assignmentNode.getActual().getAmount();
                     double proportion = (double) actual / (double) parentActual;
                     assignmentDto.setProportion(proportion);
+                }
+                
+                // Add actual values
+                if (assignmentNode.getActual() != null) {
+                    double actualValue = assignmentNode.getActual().getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
+                    assignmentDto.setActualValue(actualValue);
+                    
+                    if (rootTotal > 0) {
+                        double actualProportion = (assignmentNode.getActual().getAmount() / (double) rootTotal) * 100;
+                        assignmentDto.setActualProportion(actualProportion);
+                    }
+                }
+                
+                // Add target values (now set by RecalculateTargetsAttachedModel)
+                if (assignmentNode.getTarget() != null) {
+                    double targetValue = assignmentNode.getTarget().getAmount() / name.abuchen.portfolio.money.Values.Amount.divider();
+                    assignmentDto.setTargetValue(targetValue);
+                    
+                    if (rootTotal > 0) {
+                        double targetProportion = (assignmentNode.getTarget().getAmount() / (double) rootTotal) * 100;
+                        assignmentDto.setTargetProportion(targetProportion);
+                    }
                 }
             }
             
@@ -446,7 +485,7 @@ public class TaxonomiesController extends BaseController {
         for (name.abuchen.portfolio.model.Classification child : classification.getChildren()) {
             // Find the corresponding child node
             TaxonomyNode childNode = findChildNode(taxonomyNode, child);
-            childrenDtos.add(convertClassification(child, childNode));
+            childrenDtos.add(convertClassification(child, childNode, rootTotalValue));
         }
         dto.setChildren(childrenDtos);
         
@@ -494,5 +533,6 @@ public class TaxonomiesController extends BaseController {
         }
         return null;
     }
+    
 }
 
