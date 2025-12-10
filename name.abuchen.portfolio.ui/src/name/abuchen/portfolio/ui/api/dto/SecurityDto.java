@@ -27,7 +27,7 @@ public class SecurityDto {
     private Double dailyPriceChange;
     
     // Holdings information
-    private Long sharesHeld;
+    private Double sharesHeld;
     private Double avgPricePerShare;
     private Long totalHoldingValueSecurityCurrency;
     private Long totalHoldingValueBaseCurrency;
@@ -184,11 +184,11 @@ public class SecurityDto {
         this.dailyPriceChange = dailyPriceChange;
     }
     
-    public Long getSharesHeld() {
+    public Double getSharesHeld() {
         return sharesHeld;
     }
     
-    public void setSharesHeld(Long sharesHeld) {
+    public void setSharesHeld(Double sharesHeld) {
         this.sharesHeld = sharesHeld;
     }
     

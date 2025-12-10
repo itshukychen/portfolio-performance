@@ -353,7 +353,7 @@ public class SecurityController extends BaseController {
                 
                 // Set shares held (convert from internal representation)
                 long sharesHeld = record.getSharesHeld();
-                dto.setSharesHeld(sharesHeld / Values.Share.factor());
+                dto.setSharesHeld(sharesHeld / (double) Values.Share.factor());
                 
                 // Set average price per share (FIFO cost per share)
                 Quote avgPrice = record.getFifoCostPerSharesHeld();
